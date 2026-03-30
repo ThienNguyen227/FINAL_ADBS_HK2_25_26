@@ -1,8 +1,8 @@
 import React from "react";
 import AdminLayout from "../../layouts/AdminLayout";
 
-export default function Dashboard() {
+export default function Reports() {
   return (
-    <h1>Admin Dashboard</h1>
+    <h1>Admin Reports</h1>
   );
 }
