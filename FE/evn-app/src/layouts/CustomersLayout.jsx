@@ -5,12 +5,9 @@ import Header from "../components/Header";
 export default function CustomersLayout() {
   return (
     <div className="h-screen flex flex-col">
-      
       {/* Header */}
-      
-        <Header username="Customer" />
-      
-
+      <Header username="Customer" />
+    
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
         

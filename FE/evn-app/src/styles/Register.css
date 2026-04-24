@@ -1,0 +1,72 @@
+.register-container {
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #74ebd5, #acb6e5);
+}
+
+.register-box {
+  width: 380px;
+  padding: 30px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.register-box h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.register-box input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 15px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  transition: 0.2s;
+}
+
+.register-box input:focus {
+  border-color: #4facfe;
+  outline: none;
+}
+
+.register-box button {
+  width: 100%;
+  padding: 12px;
+  background: #4facfe;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.register-box button:hover {
+  background: #3a8ef6;
+}
+
+.links {
+  margin-top: 15px;
+  text-align: center;
+}
+
+.links span {
+  color: #4facfe;
+  cursor: pointer;
+}
+
+.error {
+  color: red;
+  text-align: center;
+  margin-top: 10px;
+  font-weight: bold;
+}
+
+.success {
+  color: green;
+  text-align: center;
+  margin-top: 10px;
+  font-weight: bold;
+}
