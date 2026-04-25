@@ -52,19 +52,26 @@ const resendOTPRegisterService = async (data) => {
   const otp = generateOTP();
   const otpHash = await bcrypt.hash(otp, 10);
 
-  await pool.request()
+  const resultInsert = await pool.request()
     .input("email", data.email)
     .input("otp", otpHash)
     .query(`
+      DECLARE @expiredAt DATETIME = DATEADD(MINUTE, 2, GETDATE());
       INSERT INTO Registration_Otps (otp_user_email, otp_code_hash, otp_expired_at)
-      VALUES (@email, @otp, DATEADD(MINUTE, 2, GETDATE()))
+      VALUES (@email, @otp, @expiredAt);
+
+      SELECT @expiredAt AS expiresAt;
     `);
+
+  const expiresAt = resultInsert.recordset[0].expiresAt;
 
   await sendOTPEmail(data.email, otp, "Gửi lại OTP xác nhận đăng ký");
 
-  return { message: "OTP_SENT" };
+  return { 
+      message: "OTP_SENT",
+      expiresAt
+    };
 };
-
 
 // ================== CONTROLLER ==================
 
@@ -81,7 +88,10 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Tài khoản đăng được đăng ký ở nới khác!" });
     }
 
-    return res.status(200).json({ message: "OTP được gửi lại qua email thành công!" });
+    return res.status(200).json({
+      message: "OTP đã được gửi lại email thành công!",
+      expiresAt: result.expiresAt
+    });
 
   } catch (err) {
     console.error(err);

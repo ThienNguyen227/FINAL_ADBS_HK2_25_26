@@ -8,56 +8,6 @@ const { generateOTP, sendOTPEmail } = require("../utils/send_otp_register");
 
 // ================== REPOSITORY ==================
 
-// // 1. Check existed phone. ----> DONE
-// const checkPhoneExistence = async (phone) => {
-//   const pool = await connectDB();
-//   const result = await pool.request()
-//     .input("phone", phone)
-//     .query("SELECT 1 FROM Users WHERE user_phone = @phone");
-//   return result.recordset[0];
-// };
-
-// // 2. Check existed email. ----> DONE
-// const checkEmailExistence = async (email) => {
-//   const pool = await connectDB();
-//   const result = await pool.request()
-//     .input("email", email)
-//     .query("SELECT 1 FROM Users WHERE user_email = @email");
-//   return result.recordset[0];
-// };
-
-// // 3. Insert otp vào bảng "Registration_Otps" ----> DONE
-// const insertOTP = async ({ email, otpHash }) => {
-//   const pool = await connectDB();
-//   await pool.request()
-//     .input("email", email)
-//     .input("otp", otpHash)
-//     .query(`
-//       INSERT INTO Registration_Otps (otp_user_email, otp_code_hash, otp_expired_at)
-//       VALUES (@email, @otp, DATEADD(MINUTE, 2, GETDATE()))
-//     `);
-// };
-
-// ================== SERVICE ==================
-
-// const registerService = async (data) => {
-//   const existingPhone = await checkPhoneExistence(data.phone);
-//   if (existingPhone) return { error: "PHONE_EXIST" };
-
-//   const existingEmail = await checkEmailExistence(data.email);
-//   if (existingEmail) return { error: "EMAIL_EXIST" };
-
-//   const otp = generateOTP();
-//   const otpHash = await bcrypt.hash(otp, 10);
-
-//   await insertOTP({email: data.email, otpHash});
-
-//   await sendOTPEmail(data.email, otp, "Mã OTP xác nhận đăng ký tài khoản");
-
-//   return { message: "OTP_SENT" };
-// };
-
-
 const registerService = async (data) => {
   const pool = await connectDB();
   const tx = new sql.Transaction(pool);
@@ -105,19 +55,28 @@ const registerService = async (data) => {
     const otp = generateOTP();
     const otpHash = await bcrypt.hash(otp, 10);
 
-    await new sql.Request(tx)
+    const resultInsert = await new sql.Request(tx)
       .input("email", data.email)
       .input("otp", otpHash)
       .query(`
+        DECLARE @expiredAt DATETIME = DATEADD(MINUTE, 2, GETDATE());
+
         INSERT INTO Registration_Otps (otp_user_email, otp_code_hash, otp_expired_at)
-        VALUES (@email, @otp, DATEADD(MINUTE, 2, GETDATE()))
+        VALUES (@email, @otp, @expiredAt);
+
+        SELECT @expiredAt AS expiresAt;
       `);
+
+    const expiresAt = resultInsert.recordset[0].expiresAt;
 
     await tx.commit();
 
     await sendOTPEmail(data.email, otp, "Mã OTP xác nhận đăng ký");
 
-    return { message: "OTP_SENT" };
+    return { 
+      message: "OTP_SENT",
+      expiresAt
+    };
 
   } catch (err) {
     await tx.rollback();
@@ -150,7 +109,10 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Tài khoản đang thực hiện đăng ký ở nơi khác!" });
     }
 
-    return res.status(200).json({ message: "Xác nhận OTP được gửi qua email để hoàn tất quá trình đăng ký!" });
+    return res.status(200).json({
+      message: "Xác nhận OTP được gửi qua email để hoàn tất quá trình đăng ký!",
+      expiresAt: result.expiresAt
+    });
 
   } catch (err) {
     console.error(err);

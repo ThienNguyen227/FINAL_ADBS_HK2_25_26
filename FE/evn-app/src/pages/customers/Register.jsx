@@ -61,6 +61,7 @@ const Register = () => {
             phone: form.phone,
             email: form.email, 
             password: form.password,
+            expiresAt: res.expiresAt,
           },
         });
       }, 2000);

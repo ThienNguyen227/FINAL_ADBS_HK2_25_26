@@ -1,34 +1,49 @@
 import { useLocation } from "react-router-dom";
-import { useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useAuth } from "../../hooks/useAuth"; 
 import { useNavigate } from "react-router-dom";
 import "../../styles/VerifyOTP.css";
 
 const VerifyOTP = () => {
   const navigate = useNavigate();
-
   const location = useLocation();
-
-  const { type, name, phone, email, password } = location.state;
-
-  const { verifyOTP, verifyOTPForgotPassword, loading, error, success, resendRegisterOTP } = useAuth(); 
-
+  const { type, name, phone, email, password, expiresAt: initExpiresAt } = location.state;
+  const { verifyOTP, verifyOTPForgotPassword, loading, error, success, resendRegisterOTP, } = useAuth(); 
   const [otp, setOtp] = useState(new Array(6).fill(""));
 
-  const [timeLeft, setTimeLeft] = useState(10); 
+  const [localInitExpiresAt, setLocalInitExpiresAt] = useState(initExpiresAt);
 
+  const [timeLeft, setTimeLeft] = useState(0);
   const inputsRef = useRef([]);
+
+  const expiresAt = useMemo(() => {
+    if (!localInitExpiresAt) return null;
+
+    const time = new Date(
+      localInitExpiresAt.split(".")[0].replace(" ", "T")
+    ).getTime();
+
+    return isNaN(time) ? null : time;
+  }, [localInitExpiresAt]);
 
   // ⏳ Countdown
   useEffect(() => {
-    if (timeLeft <= 0) return;
+    if (!expiresAt) return;
 
     const timer = setInterval(() => {
-      setTimeLeft((prev) => prev - 1);
+      const now = Date.now();
+      const diff = Math.floor((expiresAt - now) / 1000);
+
+      if (diff <= 0) {
+        setTimeLeft(0);
+        clearInterval(timer);
+      } else {
+        setTimeLeft(diff);
+      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft]);
+  }, [expiresAt]);
 
   const handleChange = (value, index) => {
     if (!/^[0-9]?$/.test(value)) return;
@@ -89,22 +104,23 @@ const VerifyOTP = () => {
   };
   // Resend OTP
   const handleResend = async () => {
-  setTimeLeft(120);
-  setOtp(new Array(6).fill(""));
+    setOtp(new Array(6).fill(""));
 
-  try {
-    if (type === "REGISTER") {
-      await resendRegisterOTP({ email });
+    try {
+      let res;
+
+      if (type === "REGISTER") {
+        res = await resendRegisterOTP({ email });
+      }
+
+      if (res?.expiresAt) {
+        setLocalInitExpiresAt(res.expiresAt);
+      }
+
+    } catch (err) {
+      console.error(err);
     }
-
-    // if (type === "FORGOT_PASSWORD") {
-    //   await resendForgotPasswordOTP({ email });
-    // }
-
-  } catch (err) {
-    console.error(err);
-  }
-};
+  };
 
   const formatTime = () => {
     const m = Math.floor(timeLeft / 60);
@@ -135,7 +151,6 @@ const VerifyOTP = () => {
           Thời gian còn lại: {formatTime()}
         </div>
 
-        {/* ✅ loading + disable */}
         {timeLeft > 0 ? (
           <button
             className="otp-btn"
@@ -150,7 +165,6 @@ const VerifyOTP = () => {
           </button>
         )}
 
-        {/* ✅ show error */}
         {error && <p style={{ color: "red" }}>{error}</p>}
         {success && <p style={{ color: "green" }}>{success}</p>}
       </div>
