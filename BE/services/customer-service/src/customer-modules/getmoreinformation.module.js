@@ -5,13 +5,12 @@ const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 // ================== VERIFY TOKEN ==================
-
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
     return res.status(401).json({
-      message: "No token provided"
+      message: "No token provided",
     });
   }
 
@@ -23,50 +22,48 @@ const verifyToken = (req, res, next) => {
     next();
   } catch (err) {
     return res.status(401).json({
-      message: "Invalid or expired token"
+      message: "Invalid or expired token",
     });
   }
 };
 
-// ================== GET ME ==================
-
+// ================== GET MORE INFORMATION ==================
 router.get("/", verifyToken, async (req, res) => {
   try {
     const pool = await connectDB();
 
+    const userId = req.query.user_id || req.user.userId;
+
     const result = await pool.request()
-      .input("userId", req.user.userId)
+      .input("userId", userId)
       .query(`
         SELECT 
-          user_id,
-          user_name,
-          user_phone,
-          user_email,
-          user_role_id,
-          user_created_at
-        FROM Users
-        WHERE user_id = @userId
+          customer_id,
+          customer_user_id,
+          customer_fullname,
+          customer_address,
+          customer_priority
+        FROM Customers
+        WHERE customer_user_id = @userId
       `);
 
-    const user = result.recordset[0];
+    const customer = result.recordset[0];
 
-    console.log("USER FROM DB:", user);
-
-    if (!user) {
+    if (!customer) {
       return res.status(404).json({
-        message: "User not found"
+        message: "Customer not found",
       });
     }
 
     return res.status(200).json({
-      user
+      customer,
     });
 
   } catch (err) {
     console.error(err);
     return res.status(500).json({
       message: "Internal Server Error",
-      error: err.message
+      error: err.message,
     });
   }
 });

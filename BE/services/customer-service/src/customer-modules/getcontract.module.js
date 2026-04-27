@@ -5,13 +5,12 @@ const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 // ================== VERIFY TOKEN ==================
-
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
     return res.status(401).json({
-      message: "No token provided"
+      message: "No token provided",
     });
   }
 
@@ -19,54 +18,56 @@ const verifyToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    req.user = decoded; // { userId: ... }
+    req.user = decoded;
     next();
   } catch (err) {
     return res.status(401).json({
-      message: "Invalid or expired token"
+      message: "Invalid or expired token",
     });
   }
 };
 
-// ================== GET ME ==================
-
+// ================== GET CONTRACTS ==================
 router.get("/", verifyToken, async (req, res) => {
+  const { customer_id } = req.query;
+
+  if (!customer_id) {
+    return res.status(400).json({
+      message: "Missing customer_id",
+    });
+  }
+
   try {
     const pool = await connectDB();
 
     const result = await pool.request()
-      .input("userId", req.user.userId)
+      .input("customerId", customer_id)
       .query(`
         SELECT 
-          user_id,
-          user_name,
-          user_phone,
-          user_email,
-          user_role_id,
-          user_created_at
-        FROM Users
-        WHERE user_id = @userId
+          c.contract_id,
+          ct.contract_type_name,
+          c.contract_rate,
+          c.contract_start_date,
+          c.contract_end_date,
+          c.contract_status
+        FROM Contracts c
+        JOIN ContractTypes ct 
+          ON c.contract_type_id = ct.contract_type_id
+        WHERE c.contract_customer_id = @customerId
+        ORDER BY c.contract_created_at DESC
       `);
 
-    const user = result.recordset[0];
-
-    console.log("USER FROM DB:", user);
-
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found"
-      });
-    }
-
     return res.status(200).json({
-      user
+      message: "Lấy danh sách hợp đồng thành công",
+      contracts: result.recordset,
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("GET CONTRACT ERROR:", err);
+
     return res.status(500).json({
       message: "Internal Server Error",
-      error: err.message
+      error: err.message,
     });
   }
 });

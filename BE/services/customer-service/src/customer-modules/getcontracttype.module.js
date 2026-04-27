@@ -11,7 +11,7 @@ const verifyToken = (req, res, next) => {
 
   if (!authHeader) {
     return res.status(401).json({
-      message: "No token provided"
+      message: "No token provided",
     });
   }
 
@@ -19,54 +19,42 @@ const verifyToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    req.user = decoded; // { userId: ... }
+    req.user = decoded;
     next();
   } catch (err) {
     return res.status(401).json({
-      message: "Invalid or expired token"
+      message: "Invalid or expired token",
     });
   }
 };
 
-// ================== GET ME ==================
+// ================== GET CONTRACT TYPES ==================
 
 router.get("/", verifyToken, async (req, res) => {
   try {
     const pool = await connectDB();
 
-    const result = await pool.request()
-      .input("userId", req.user.userId)
-      .query(`
-        SELECT 
-          user_id,
-          user_name,
-          user_phone,
-          user_email,
-          user_role_id,
-          user_created_at
-        FROM Users
-        WHERE user_id = @userId
-      `);
+    const result = await pool.request().query(`
+      SELECT 
+        contract_type_id,
+        contract_type_name,
+        contract_type_rate
+      FROM ContractTypes
+      ORDER BY contract_type_id ASC
+    `);
 
-    const user = result.recordset[0];
-
-    console.log("USER FROM DB:", user);
-
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found"
-      });
-    }
+    const contractTypes = result.recordset;
 
     return res.status(200).json({
-      user
+      message: "Get contract types successfully",
+      contracttype: contractTypes,
     });
-
   } catch (err) {
-    console.error(err);
+    console.error("GET CONTRACT TYPE ERROR:", err);
+
     return res.status(500).json({
       message: "Internal Server Error",
-      error: err.message
+      error: err.message,
     });
   }
 });

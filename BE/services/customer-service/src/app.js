@@ -11,6 +11,6 @@ app.use(cors({
 
 app.use(express.json());
 
-app.use("/customers", customerRoutes);
+app.use("/customer", customerRoutes);
 
 module.exports = app;
