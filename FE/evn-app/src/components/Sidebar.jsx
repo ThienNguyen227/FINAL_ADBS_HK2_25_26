@@ -7,7 +7,8 @@ import { FaTachometerAlt } from "react-icons/fa";
 import { SiDowndetector } from "react-icons/si";
 import { LiaFileContractSolid } from "react-icons/lia";
 import { MdDashboard } from "react-icons/md";
-import { TbReportSearch } from "react-icons/tb";
+import { TbReportSearch, TbContract } from "react-icons/tb";
+import { IoInformationCircle } from "react-icons/io5";
 
 import { useAuth } from "../hooks/useAuth";
 
@@ -46,6 +47,8 @@ export default function Sidebar() {
       { name: "Anomaly Detection", path: "/admin/anomaly-detection", icon: <SiDowndetector /> },
     ],
     Customer: [
+      { name: "My Information", path: "/customers/myinformation", icon: <IoInformationCircle /> },
+      { name: "My Contract ", path: "/customers/mycontract", icon: <TbContract /> },
       { name: "My Usage", path: "/customers/myusage", icon: <FaBolt /> },
       { name: "My Billing", path: "/customers/mybilling", icon: <FaMoneyBillTrendUp /> },
     ],

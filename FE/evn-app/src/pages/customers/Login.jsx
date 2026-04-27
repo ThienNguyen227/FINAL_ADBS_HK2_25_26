@@ -55,7 +55,7 @@ const Login = () => {
     // Cần chỉnh
     if (!res?.error) {
       setTimeout(() => {
-        navigate("/customers/myusage", {
+        navigate("/customers/myinformation", {
           state: {
             
           },

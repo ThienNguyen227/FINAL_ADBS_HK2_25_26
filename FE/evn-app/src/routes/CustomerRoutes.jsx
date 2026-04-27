@@ -1,6 +1,8 @@
 import { Route } from "react-router-dom";
 import CustomersLayout from "../layouts/CustomersLayout";
 import MyBilling from "../pages/customers/MyBilling";
+import MyInformation from "../pages/customers/MyInformation";
+import MyContract from "../pages/customers/MyContract";
 import MyUsage from "../pages/customers/MyUsage";
 import Register from "../pages/customers/Register";
 import VerifyOTP from "../pages/customers/VerifyOTP";
@@ -27,6 +29,8 @@ export default function CustomerRoutes() {
           </ProtectedRoute>
         }
       >
+        <Route path="myinformation" element={<MyInformation />} />
+        <Route path="mycontract" element={<MyContract />} />
         <Route path="mybilling" element={<MyBilling />} />
         <Route path="myusage" element={<MyUsage />} />
       </Route>

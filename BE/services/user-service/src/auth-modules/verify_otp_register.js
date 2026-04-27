@@ -98,7 +98,7 @@ const getUserIdByEmail = async (email) => {
 
 const createCustomer = async (userId) => {
   const res = await axios.post(
-    "http://localhost:3001/customers/create-customer",
+    "http://localhost:3001/customer/create-customer",
     {
       customer_user_id: userId
     }
