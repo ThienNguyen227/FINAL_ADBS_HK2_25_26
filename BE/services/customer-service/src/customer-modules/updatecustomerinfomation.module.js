@@ -72,9 +72,6 @@ router.put("/", verifyToken, async (req, res) => {
         FROM Customers
         WHERE customer_user_id = @userId
       `);
-    console.log("Raw result:", result);
-    console.log("Recordset:", result.recordset);
-    console.log("First row:", result.recordset[0]);
     
     const customer = result.recordset[0];
 
