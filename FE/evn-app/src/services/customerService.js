@@ -60,3 +60,28 @@ export const getContractsAPI = async (customer_id) => {
     },
   });
 };
+
+// 6.
+// export const cancelContractAPI = async (contract_id) => {
+//   const token = sessionStorage.getItem("token");
+
+//   return axios.put(`${API_URL}/cancel-contract`, {
+//     params: { contract_id },
+//     headers: {
+//       Authorization: `Bearer ${token}`,
+//     },
+//   });
+// };
+
+export const cancelContractAPI = async (contract_id) => {
+  const token = sessionStorage.getItem("token");
+
+  return axios.put(`${API_URL}/cancel-contract`, { contract_id },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`, 
+      },
+    }
+  );
+};
+

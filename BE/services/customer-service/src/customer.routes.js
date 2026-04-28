@@ -19,6 +19,9 @@ const registerContractRoute = require("./customer-modules/registercontract.modul
 // 5. 
 const getContractRoute = require("./customer-modules/getcontract.module");
 
+// 6. 
+const cancelContractRoute = require("./customer-modules/cancelcontract.module");
+
 
 
 // .
@@ -38,6 +41,10 @@ router.use("/register-contract", registerContractRoute);
 
 // 5.
 router.use("/get-contract", getContractRoute);
+
+// 6.
+router.use("/cancel-contract", cancelContractRoute);
+
 
 
 

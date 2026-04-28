@@ -6,9 +6,14 @@ import "../../styles/MyContract.css";
 export default function MyContract() {
   const { user } = useAuth();
   const { setSuccessRegisterContract, setErrorRegisterContract, successRegisterContract, errorRegisterContract, 
-    loading, customer, getMoreInformation, getContractType, contracttype, registerContract, getContracts, contracts, } = useCustomer();
+    loading, customer, getMoreInformation, getContractType, contracttype, registerContract, getContracts, contracts, cancelContract, errorCancelContract, successCancelContract, setSuccessCancelContract, setErrorCancelContract } = useCustomer();
   const [openForm, setOpenForm] = useState(false);
   const [selectedContract, setSelectedContract] = useState(null);
+
+
+  const [openDetail, setOpenDetail] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState(null);
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -57,6 +62,7 @@ export default function MyContract() {
       };
 
       const res = await registerContract(registerContractPayload);
+      await getContracts(customer.customer_id);
 
       console.log("Đăng ký hợp đồng thành công: ", res);
     } catch (err) {
@@ -71,8 +77,39 @@ export default function MyContract() {
     setSelectedContract(null);
   };
 
+  const handleCancelContract = async () => {
+    const confirm = window.confirm("Bạn có chắc muốn hủy hợp đồng này không?");
+    if (!confirm) return;
+
+    try {
+      const res = await cancelContract(selectedDetail.contract_id);
+
+      setSelectedDetail(prev => ({
+        ...prev,
+        contract_status: "TERMINATED",
+      }));
+
+      await getContracts(customer.customer_id);
+
+      setTimeout(() => {
+        setSuccessCancelContract(null);
+      }, 3000);
+      
+      
+      console.log("Đăng ký hợp đồng thành công: ", res);
+    } catch (err) {
+
+      setTimeout(() => {
+        setErrorCancelContract(null);
+      }, 3000);
+      alert("Hủy thất bại");
+      console.error("Đăng ký hợp đồng thất bại: ", err);
+    }
+  };
+
   return (
     <>
+      {/* Button Register*/}
       <button className="btn-primary" onClick={() => setOpenForm(true)}>
         Đăng ký hợp đồng
       </button>
@@ -85,10 +122,10 @@ export default function MyContract() {
           <thead>
             <tr>
               <th>Mã HĐ</th>
-              <th>Loại</th>
+              <th>Loại HĐ</th>
               <th>Giá</th>
-              <th>Bắt đầu</th>
-              <th>Kết thúc</th>
+              <th>Ngày bắt đầu</th>
+              <th>Ngày kết thúc</th>
               <th>Trạng thái</th>
               <th>Hành động</th>
             </tr>
@@ -99,33 +136,30 @@ export default function MyContract() {
               contracts.map((item) => (
                 <tr key={item.contract_id}>
                   <td>{item.contract_id}</td>
-
                   <td>{item.contract_type_name}</td>
-
                   <td>
                     {new Intl.NumberFormat("vi-VN").format(item.contract_rate)} đ/kWh
                   </td>
-
                   <td>
                     {new Date(item.contract_start_date).toLocaleDateString("vi-VN")}
                   </td>
-
                   <td>
                     {new Date(item.contract_end_date).toLocaleDateString("vi-VN")}
                   </td>
-
                   <td>
                     <span className={`status ${item.contract_status.toLowerCase()}`}>
                       {item.contract_status}
                     </span>
                   </td>
-
                   <td>
                     <button
                       className="btn-view"
-                      onClick={() => alert(`Xem chi tiết HĐ ${item.contract_id}`)}
+                      onClick={() => {
+                        setSelectedDetail(item);
+                        setOpenDetail(true);
+                      }}
                     >
-                      Xem
+                      Xem chi tiết
                     </button>
                   </td>
                 </tr>
@@ -139,8 +173,7 @@ export default function MyContract() {
         </table>
       </div>
 
-
-      {/* Form */}
+      {/* Registration Form Modal*/}
       {openForm && (
         <div className="modal-overlay">
           <div className="modal-card">
@@ -193,6 +226,106 @@ export default function MyContract() {
 
             {errorRegisterContract && <div className="alert-error">❌ {errorRegisterContract}</div>}
             {successRegisterContract && <div className="alert-success">✅ {successRegisterContract}</div>}
+
+          </div>
+        </div>
+      )}
+
+      {/* Detail Contract Modal  */}
+      {openDetail && selectedDetail && (
+        <div className="modal-overlay">
+          <div className="modal-card detail-modal">
+
+            {/* Header */}
+            <div className="modal-header">
+              <h2>📄 Chi tiết hợp đồng</h2>
+              <button className="close-btn" onClick={() => setOpenDetail(false)}>
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="modal-body">
+
+              {/* Customer Info */}
+              <h3 className="sub-title">👤 Thông tin khách hàng</h3>
+
+              <div className="info-list">
+                <p><span>Họ tên:</span> {selectedDetail.contract_customer_fullname}</p>
+                <p><span>SĐT:</span> {selectedDetail.contract_customer_phone}</p>
+                <p><span>Email:</span> {selectedDetail.contract_customer_email}</p>
+                <p><span>Địa chỉ:</span> {selectedDetail.contract_customer_address}</p>
+              </div>
+
+              {/* Divider */}
+              <div className="divider"></div>
+
+              {/* Contract Info */}
+              <div className="info-grid">
+
+                <div className="info-item">
+                  <span className="label">Mã hợp đồng</span>
+                  <span className="value">{selectedDetail.contract_id}</span>
+                </div>
+
+                <div className="info-item">
+                  <span className="label mb-1">Trạng thái</span>
+                  <span className={`status ${selectedDetail.contract_status?.toLowerCase()}`}>
+                    {selectedDetail.contract_status}
+                  </span>
+                </div>
+
+                <div className="info-item">
+                  <span className="label">Loại hợp đồng</span>
+                  <span className="value">{selectedDetail.contract_type_name}</span>
+                </div>
+
+                <div className="info-item">
+                  <span className="label">Giá điện</span>
+                  <span className="value price">
+                    {new Intl.NumberFormat("vi-VN").format(selectedDetail.contract_rate)} đ/kWh
+                  </span>
+                </div>
+
+              </div>
+
+              {/* Divider */}
+              <div className="divider"></div>
+
+              {/* Date Info */}
+              <div className="date-box">
+                <div>
+                  <span>Ngày bắt đầu: </span>
+                  <strong>
+                    {new Date(selectedDetail.contract_start_date).toLocaleDateString("vi-VN")}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Ngày kết thúc: </span>
+                  <strong>
+                    {new Date(selectedDetail.contract_end_date).toLocaleDateString("vi-VN")}
+                  </strong>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            {selectedDetail.contract_status === "ACTIVE" && (
+              <div className="modal-footer">
+                <button
+                  disabled={loading}
+                  className="px-4 py-2 rounded bg-red-500 text-white hover:bg-red-600"
+                  onClick={handleCancelContract}
+                >
+                  {loading ? "Đang hủy hợp đồng..." : "Hủy hợp đồng"}
+                </button>
+              </div>
+            )}
+
+            {errorCancelContract && <div className="alert-error">❌ {errorCancelContract}</div>}
+            {successCancelContract && <div className="alert-success">✅ {successCancelContract}</div>}
 
           </div>
         </div>

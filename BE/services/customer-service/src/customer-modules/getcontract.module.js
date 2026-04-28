@@ -46,6 +46,10 @@ router.get("/", verifyToken, async (req, res) => {
         SELECT 
           c.contract_id,
           ct.contract_type_name,
+          c.contract_customer_fullname,
+          c.contract_customer_address,
+          c.contract_customer_phone,
+          c.contract_customer_email,
           c.contract_rate,
           c.contract_start_date,
           c.contract_end_date,

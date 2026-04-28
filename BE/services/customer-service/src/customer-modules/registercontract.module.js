@@ -258,7 +258,7 @@ router.post("/", verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error("🔥 REGISTER CONTRACT ERROR:", err);
+    console.error("REGISTER CONTRACT ERROR:", err);
 
     if (transaction) {
       await transaction.rollback();

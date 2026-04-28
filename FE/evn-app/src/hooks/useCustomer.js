@@ -1,5 +1,5 @@
 import { useState} from "react";
-import { getMoreInformationAPI, updateCustomerInformationAPI, getContractTypeAPI, registerContractAPI, getContractsAPI } from "../services/customerService";
+import { getMoreInformationAPI, updateCustomerInformationAPI, getContractTypeAPI, registerContractAPI, getContractsAPI, cancelContractAPI } from "../services/customerService";
 
 export const useCustomer = () => {
   const [customer, setCustomer] = useState(null);
@@ -14,6 +14,10 @@ export const useCustomer = () => {
   // 4.
   const [errorRegisterContract, setErrorRegisterContract] = useState(null);
   const [successRegisterContract, setSuccessRegisterContract] = useState(null);
+
+  // 6.
+  const [errorCancelContract, setErrorCancelContract] = useState(null);
+  const [successCancelContract, setSuccessCancelContract] = useState(null);
 
   // 1. 
   const getMoreInformation = async (user_id) => {
@@ -121,6 +125,28 @@ export const useCustomer = () => {
       setLoading(false);
     }
   };
+
+  // 6. 
+  const cancelContract = async (contract_id) => {
+    try {
+      setLoading(true);
+      setErrorCancelContract(null);
+      setSuccessCancelContract(null);
+
+      const res = await cancelContractAPI(contract_id);
+
+      setContracts(res.data.contracts);
+      setSuccessCancelContract(res.data.message)
+
+      return res.data;
+    } catch (err) {
+      const message = err.response?.data?.message || "Lỗi hủy hợp đồng";
+      setErrorCancelContract(message);
+      throw err; 
+    } finally {
+      setLoading(false);
+    }
+  };
   
 
 
@@ -140,5 +166,10 @@ export const useCustomer = () => {
     setSuccessRegisterContract,
     getContracts, 
     contracts,
+    cancelContract,
+    errorCancelContract,
+    successCancelContract,
+    setErrorCancelContract,
+    setSuccessCancelContract,
   };
 };
