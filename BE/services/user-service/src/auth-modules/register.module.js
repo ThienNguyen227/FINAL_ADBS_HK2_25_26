@@ -63,11 +63,9 @@ const registerService = async (data) => {
 
         INSERT INTO Registration_Otps (otp_user_email, otp_code_hash, otp_expired_at)
         VALUES (@email, @otp, @expiredAt);
-
-        SELECT @expiredAt AS expiresAt;
       `);
 
-    const expiresAt = resultInsert.recordset[0].expiresAt;
+    const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
     await tx.commit();
 

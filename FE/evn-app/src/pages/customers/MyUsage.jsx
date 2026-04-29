@@ -17,15 +17,38 @@ import {
   Button
 } from "@mui/material";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useAuth } from "../../hooks/useAuth";
 
 export default function MyUsage() {
+  const { user } = useAuth();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [neighborhoodId, setNeighborhoodId] = useState(null);
 
-  const userMeterId = "METER_1";
+  // Sinh meter_id từ user_id thực tế đang đăng nhập
+  const userMeterId = user ? `METER_${user.user_id}` : null;
+
+  // Lấy thông tin customer (customer_address) từ SQL Server qua customer-service
+  useEffect(() => {
+    if (!user) return;
+    const token = sessionStorage.getItem("token");
+    fetch(`http://localhost:3001/customer/get-more-information?user_id=${user.user_id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.customer && data.customer.customer_address) {
+          setNeighborhoodId(data.customer.customer_address);
+        } else {
+          setNeighborhoodId("KHU_VUC_MAC_DINH");
+        }
+      })
+      .catch(() => setNeighborhoodId("KHU_VUC_MAC_DINH"));
+  }, [user]);
 
   const fetchHistory = async () => {
+    if (!userMeterId) return;
     setLoading(true);
     try {
       const res = await fetch(`http://localhost:3004/api/usage/history/${userMeterId}`);
@@ -47,7 +70,7 @@ export default function MyUsage() {
   const isMaxedOut = currentCount >= 96;
 
   const handleSimulateReading = async () => {
-    if (isMaxedOut) return;
+    if (isMaxedOut || !userMeterId || !neighborhoodId) return;
 
     try {
       // 10% cơ hội sinh ra dữ liệu bất thường (từ 5.0 đến 8.0 kWh) để test trang Anomaly
@@ -67,7 +90,7 @@ export default function MyUsage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           meter_id: userMeterId,
-          neighborhood_id: "DISTRICT_1",
+          neighborhood_id: neighborhoodId,
           usage: randomUsage,
           timestamp: simulateDate.toISOString()
         })
@@ -79,14 +102,25 @@ export default function MyUsage() {
   };
 
   useEffect(() => {
-    fetchHistory();
-  }, []);
+    if (userMeterId) {
+      fetchHistory();
+    }
+  }, [userMeterId]);
 
   // Format data cho biểu đồ đường
   const chartData = history.length > 0 && history[0].readings ? history[0].readings.map(r => ({
     time: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     usage: r.usage
   })) : [];
+
+  if (!user) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <CircularProgress />
+        <Typography mt={2}>Đang tải thông tin người dùng...</Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: 3, maxWidth: 1000, margin: '0 auto' }}>
@@ -98,12 +132,19 @@ export default function MyUsage() {
           variant="contained"
           color="secondary"
           onClick={handleSimulateReading}
-          disabled={isMaxedOut}
+          disabled={isMaxedOut || !neighborhoodId}
           sx={{ fontWeight: 'bold' }}
         >
           {isMaxedOut ? "✅ Đã đạt tối đa (96/96)" : "⏱️ Giả lập đo lường 15p"}
         </Button>
       </Box>
+
+      {/* Thông tin đồng hồ hiện tại */}
+      <Alert severity="info" sx={{ mb: 2 }}>
+        <strong>Mã đồng hồ:</strong> {userMeterId} &nbsp;|&nbsp;
+        <strong>Khu vực:</strong> {neighborhoodId || "Đang tải..."} &nbsp;|&nbsp;
+        <strong>Tài khoản:</strong> {user.user_name} (ID: {user.user_id})
+      </Alert>
 
       {/* BIỂU ĐỒ ĐƯỜNG LỊCH SỬ TIÊU THỤ (Historical Line Chart) */}
       {chartData.length > 0 && (
@@ -130,8 +171,6 @@ export default function MyUsage() {
         </Card>
       )}
 
-
-
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}>
           <CircularProgress />
@@ -139,7 +178,7 @@ export default function MyUsage() {
       ) : error ? (
         <Alert severity="error">❌ {error}</Alert>
       ) : history.length === 0 ? (
-        <Alert severity="info">Không tìm thấy lịch sử tiêu thụ cho đồng hồ của bạn.</Alert>
+        <Alert severity="info">Không tìm thấy lịch sử tiêu thụ cho đồng hồ của bạn. Hãy bấm nút "Giả lập đo lường 15p" để bắt đầu.</Alert>
       ) : (
         <TableContainer component={Paper} elevation={3}>
           <Table>
@@ -148,28 +187,33 @@ export default function MyUsage() {
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Ngày</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Tổng tiêu thụ (kWh)</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Số lần đo</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Tối ưu hóa</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Ước tính chi phí</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {history.map((doc, idx) => (
-                <TableRow key={idx}>
-                  <TableCell component="th" scope="row">
-                    <strong>{new Date(doc.day).toLocaleDateString()}</strong>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography fontWeight="bold" color="secondary.main">
-                      {doc.total_daily_usage.toFixed(2)} kWh
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    {doc.reading_count} / 96 (Chu kỳ)
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip size="small" color="success" label="1 Document (Bucket)" />
-                  </TableCell>
-                </TableRow>
-              ))}
+              {history.map((doc, idx) => {
+                const estimatedCost = doc.total_daily_usage * 1500;
+                return (
+                  <TableRow key={idx}>
+                    <TableCell component="th" scope="row">
+                      <strong>{new Date(doc.day).toLocaleDateString()}</strong>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography fontWeight="bold" color="secondary.main">
+                        {doc.total_daily_usage.toFixed(2)} kWh
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      {doc.reading_count} / 96 (Chu kỳ)
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography fontWeight="bold" color={estimatedCost > 50000 ? "error.main" : "text.primary"}>
+                        {estimatedCost.toLocaleString('vi-VN')} đ
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>

@@ -46,7 +46,8 @@ const forgotPasswordService = async (data) => {
     // gửi email thật
     await sendOTPEmail(data.email, otp, "Mã OTP xác nhận quên mật khẩu");
 
-  return { message: "EMAIL_VALID" };
+  const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+  return { message: "EMAIL_VALID", expiresAt };
 };
 
 // ================== CONTROLLER ==================
@@ -60,7 +61,10 @@ router.post("/", async (req, res) => { //
       return res.status(400).json({ message: "Email không tồn tại trong hệ thống!" });
     }
 
-    return res.status(200).json({ message: "Xác nhận OTP được gửi qua email để tiến hành thay đổi mật khẩu!" });
+    return res.status(200).json({ 
+      message: "Xác nhận OTP được gửi qua email để tiến hành thay đổi mật khẩu!",
+      expiresAt: result.expiresAt
+    });
 
   } catch (err) {
     console.error(err);
