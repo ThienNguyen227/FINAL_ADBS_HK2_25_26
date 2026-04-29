@@ -9,6 +9,7 @@ import { LiaFileContractSolid } from "react-icons/lia";
 import { MdDashboard } from "react-icons/md";
 import { TbReportSearch, TbContract } from "react-icons/tb";
 import { IoInformationCircle } from "react-icons/io5";
+import { MdLocationOn } from "react-icons/md";
 
 import { useAuth } from "../hooks/useAuth";
 
@@ -33,6 +34,7 @@ export default function Sidebar() {
       { name: "Contracts", path: "/admin/contracts", icon: <LiaFileContractSolid /> },
       { name: "Meter Readings", path: "/admin/meter-readings", icon: <FaTachometerAlt /> },
       { name: "Anomaly Detection", path: "/admin/anomaly-detection", icon: <SiDowndetector /> },
+      { name: "Geo Monitoring", path: "/admin/geo-monitoring", icon: <MdLocationOn /> },
       { name: "Billing", path: "/admin/billing", icon: <FaMoneyBillTrendUp /> },
       { name: "Reports", path: "/admin/reports", icon: <TbReportSearch /> },
     ],
@@ -45,6 +47,7 @@ export default function Sidebar() {
       { name: "Dashboard", path: "/admin/dashboard", icon: <MdDashboard /> },
       { name: "Meter Readings", path: "/admin/meter-readings", icon: <FaTachometerAlt /> },
       { name: "Anomaly Detection", path: "/admin/anomaly-detection", icon: <SiDowndetector /> },
+      { name: "Geo Monitoring", path: "/admin/geo-monitoring", icon: <MdLocationOn /> },
     ],
     Customer: [
       { name: "My Information", path: "/customers/myinformation", icon: <IoInformationCircle /> },

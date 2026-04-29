@@ -18,11 +18,7 @@ const VerifyOTP = () => {
 
   const expiresAt = useMemo(() => {
     if (!localInitExpiresAt) return null;
-
-    const time = new Date(
-      localInitExpiresAt.split(".")[0].replace(" ", "T")
-    ).getTime();
-
+    const time = new Date(localInitExpiresAt).getTime();
     return isNaN(time) ? null : time;
   }, [localInitExpiresAt]);
 
