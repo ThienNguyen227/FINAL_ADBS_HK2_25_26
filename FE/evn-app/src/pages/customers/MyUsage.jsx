@@ -92,7 +92,9 @@ export default function MyUsage() {
           meter_id: userMeterId,
           neighborhood_id: neighborhoodId,
           usage: randomUsage,
-          timestamp: simulateDate.toISOString()
+          timestamp: simulateDate.toISOString(),
+          longitude: 106.7009 + (Math.random() - 0.5) * 0.03,
+          latitude: 10.7769 + (Math.random() - 0.5) * 0.03
         })
       });
       fetchHistory();
