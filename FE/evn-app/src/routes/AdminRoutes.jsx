@@ -4,21 +4,23 @@ import Customer from "../pages/admin/Customer";
 import Contracts from "../pages/admin/Contracts";
 import MeterReadings from "../pages/admin/MeterReadings";
 import AnomalyDetection from "../pages/admin/AnomalyDetection";
+import GeoMonitoring from "../pages/admin/GeoMonitoring";
 import Billing from "../pages/admin/Billing";
 import Reports from "../pages/admin/Reports";
 import RoleGuard from "./RoleGuard";
 import { Route } from "react-router-dom";
 
 export default function AdminRoutes({ role, username }) {
+  // Đảm bảo các route con được đăng ký đúng dưới /admin
   return (
     <Route path="/admin" element={<AdminLayout username={username} role={role} />}>
 
       {/* Ai cũng vào được */}
-      <Route path="dashboard" element={<Dashboard />} />
+      <Route path="/admin/dashboard" element={<Dashboard />} />
 
       {/* Admin only */}
       <Route
-        path="customers"
+        path="/admin/customers"
         element={
           <RoleGuard role={role} allow={["Admin"]}>
             <Customer />
@@ -27,7 +29,7 @@ export default function AdminRoutes({ role, username }) {
       />
 
       <Route
-        path="contracts"
+        path="/admin/contracts"
         element={
           <RoleGuard role={role} allow={["Admin"]}>
             <Contracts />
@@ -37,7 +39,7 @@ export default function AdminRoutes({ role, username }) {
 
       {/* Operator + Admin */}
       <Route
-        path="meter-readings"
+        path="/admin/meter-readings"
         element={
           <RoleGuard role={role} allow={["Admin", "Operator"]}>
             <MeterReadings />
@@ -46,7 +48,7 @@ export default function AdminRoutes({ role, username }) {
       />
 
       <Route
-        path="anomaly-detection"
+        path="/admin/anomaly-detection"
         element={
           <RoleGuard role={role} allow={["Admin", "Operator"]}>
             <AnomalyDetection />
@@ -54,9 +56,18 @@ export default function AdminRoutes({ role, username }) {
         }
       />
 
+      <Route
+        path="/admin/geo-monitoring"
+        element={
+          <RoleGuard role={role} allow={["Admin", "Operator"]}>
+            <GeoMonitoring />
+          </RoleGuard>
+        }
+      />
+
       {/* Billing + Admin */}
       <Route
-        path="billing"
+        path="/admin/billing"
         element={
           <RoleGuard role={role} allow={["Admin", "Billing"]}>
             <Billing />
@@ -65,7 +76,7 @@ export default function AdminRoutes({ role, username }) {
       />
 
       <Route
-        path="reports"
+        path="/admin/reports"
         element={
           <RoleGuard role={role} allow={["Admin", "Billing"]}>
             <Reports />

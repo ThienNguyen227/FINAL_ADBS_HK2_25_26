@@ -59,25 +59,22 @@ const resendOTPRegisterService = async (data) => {
       DECLARE @expiredAt DATETIME = DATEADD(MINUTE, 2, GETDATE());
       INSERT INTO Registration_Otps (otp_user_email, otp_code_hash, otp_expired_at)
       VALUES (@email, @otp, @expiredAt);
-
-      SELECT @expiredAt AS expiresAt;
     `);
 
-  const expiresAt = resultInsert.recordset[0].expiresAt;
+  const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
   await sendOTPEmail(data.email, otp, "Gửi lại OTP xác nhận đăng ký");
 
-  return { 
-      message: "OTP_SENT",
-      expiresAt
-    };
+  return {
+    message: "OTP_SENT",
+    expiresAt
+  };
 };
 
 // ================== CONTROLLER ==================
 
 router.post("/", async (req, res) => {
-  try 
-  {
+  try {
     const result = await resendOTPRegisterService(req.body);
 
     if (result.error === "ACCOUNT_ALREADY_CREATED") {
@@ -85,7 +82,7 @@ router.post("/", async (req, res) => {
     }
 
     if (result.error === "OTP_IN_PROGRESS") {
-      return res.status(400).json({ message: "Tài khoản đăng được đăng ký ở nới khác!" });
+      return res.status(400).json({ message: "Tài khoản đang được đăng ký ở nới khác!" });
     }
 
     return res.status(200).json({
