@@ -9,7 +9,7 @@ const Login = () => {
 
   const navigate = useNavigate();
 
-  const { login, loading, error, success } = useContext(AuthContext);
+  const { login, loading, error, success, setError, setSuccess } = useContext(AuthContext);
 
   const [form, setForm] = useState({
     phone: "",
@@ -61,7 +61,13 @@ const Login = () => {
           },
         });
       }, 2000);
+      setTimeout(() => {
+        setSuccess(null);
+      }, 3000);
     }
+    setTimeout(() => {
+      setError(null);
+    }, 5000);
   };
 
   return (
