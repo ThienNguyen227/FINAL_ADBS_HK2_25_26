@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { connectDB } = require("../config/db");
+const { sql, connectDB } = require("../config/db");
 const bcrypt = require("bcrypt");
 const axios = require("axios");
 
@@ -85,17 +85,6 @@ const getUserIdByEmail = async (email) => {
   return result.recordset[0];
 };
 
-// CALL API
-// const createCustomer = async (userId) => {
-//   try {
-//     await axios.post("http://localhost:3001/customers/create-customer", {
-//       customer_user_id: userId
-//     });
-//   } catch (err) {
-//     console.error("Create customer failed:", err.message);
-//   }
-// };
-
 const createCustomer = async (userId) => {
   const res = await axios.post(
     "http://localhost:3001/customer/create-customer",
@@ -110,63 +99,171 @@ const createCustomer = async (userId) => {
 
 // ================== SERVICE ==================
 
+// const verifyOTPService = async ({ name, phone, email, password, otp }) => {
+//   const record = await getLatestOTP(email);
+
+//   if (!record) return { error: "OTP_NOT_FOUND" };
+
+//   // đã dùng rồi
+//   if (record.otp_status !== "ACTIVE") {
+//     return { error: "OTP_ALREADY_USED" };
+//   }
+
+//   // hết hạn
+//   if (new Date() > record.otp_expired_at) {
+//     await updateOTPStatus(record.otp_id, "EXPIRED");
+//     return { error: "OTP_EXPIRED" };
+//   }
+
+//   // vượt quá số lần thử (3 lần)
+//   if (record.otp_attempt_count >= 3) {
+//     await updateOTPStatus(record.otp_id, "BLOCKED");
+//     return { error: "OTP_BLOCKED" };
+//   }
+
+//   // sai OTP
+//   const isMatch = await bcrypt.compare(otp, record.otp_code_hash);
+//   if (!isMatch) {
+//     await increaseAttempt(record.otp_id);
+//     return { error: "OTP_INVALID" };
+//   }
+
+//   try {
+//     await updateOTPStatus(record.otp_id, "VERIFIED");
+
+//     await createUser(name, phone, email, password);
+//     const userId = await getUserIdByEmail(email)
+
+//     await createCustomer(userId);
+//   } catch (err) {
+//     const deleted = await deleteUser(email);
+
+//     if (deleted > 0) {
+//       console.log("ROLLBACK SUCCESS: user deleted");
+//     } else {
+//       console.log("ROLLBACK FAIL: user not found");
+//     }
+
+//     throw err;
+//   }
+
+//   return { message: "OTP_VALID" };
+// };
+
 const verifyOTPService = async ({ name, phone, email, password, otp }) => {
-  const record = await getLatestOTP(email);
-
-  if (!record) return { error: "OTP_NOT_FOUND" };
-
-  // đã dùng rồi
-  if (record.otp_status !== "ACTIVE") {
-    return { error: "OTP_ALREADY_USED" };
-  }
-
-  // hết hạn
-  if (new Date() > record.otp_expired_at) {
-    await updateOTPStatus(record.otp_id, "EXPIRED");
-    return { error: "OTP_EXPIRED" };
-  }
-
-  // vượt quá số lần thử (3 lần)
-  if (record.otp_attempt_count >= 3) {
-    await updateOTPStatus(record.otp_id, "BLOCKED");
-    return { error: "OTP_BLOCKED" };
-  }
-
-  // sai OTP
-  const isMatch = await bcrypt.compare(otp, record.otp_code_hash);
-  if (!isMatch) {
-    await increaseAttempt(record.otp_id);
-    return { error: "OTP_INVALID" };
-  }
-
-  // await updateOTPStatus(record.otp_id, "VERIFIED");
-
-  // await createUser(name, phone, email, password);
-
-  // const userId = await getUserIdByEmail(email)
-
-  // await createCustomer(userId);
+  const pool = await connectDB();
+  const tx = new sql.Transaction(pool);
 
   try {
-    await updateOTPStatus(record.otp_id, "VERIFIED");
+    await tx.begin();
 
-    await createUser(name, phone, email, password);
-    const userId = await getUserIdByEmail(email)
+    // 🔥 1. Lấy OTP + lock
+    const result = await new sql.Request(tx)
+      .input("email", email)
+      .query(`
+        SELECT TOP 1 *
+        FROM Registration_Otps WITH (UPDLOCK, HOLDLOCK)
+        WHERE otp_user_email = @email
+        ORDER BY otp_created_at DESC
+      `);
 
-    await createCustomer(userId);
-  } catch (err) {
-    const deleted = await deleteUser(email);
+    const record = result.recordset[0];
 
-    if (deleted > 0) {
-      console.log("ROLLBACK SUCCESS: user deleted");
-    } else {
-      console.log("ROLLBACK FAIL: user not found");
+    if (!record) {
+      await tx.rollback();
+      return { error: "OTP_NOT_FOUND" };
     }
+
+    if (record.otp_status !== "ACTIVE") {
+      await tx.rollback();
+      return { error: "OTP_ALREADY_USED" };
+    }
+
+    if (new Date() > record.otp_expired_at) {
+      await new sql.Request(tx)
+        .input("id", record.otp_id)
+        .query(`
+          UPDATE Registration_Otps
+          SET otp_status = 'EXPIRED'
+          WHERE otp_id = @id
+        `);
+
+      await tx.rollback();
+      return { error: "OTP_EXPIRED" };
+    }
+
+    if (record.otp_attempt_count >= 3) {
+      await new sql.Request(tx)
+        .input("id", record.otp_id)
+        .query(`
+          UPDATE Registration_Otps
+          SET otp_status = 'BLOCKED'
+          WHERE otp_id = @id
+        `);
+
+      await tx.rollback();
+      return { error: "OTP_BLOCKED" };
+    }
+
+    // 🔥 check OTP
+    const isMatch = await bcrypt.compare(otp, record.otp_code_hash);
+    if (!isMatch) {
+      await new sql.Request(tx)
+        .input("id", record.otp_id)
+        .query(`
+          UPDATE Registration_Otps
+          SET otp_attempt_count = otp_attempt_count + 1
+          WHERE otp_id = @id
+        `);
+
+      // await tx.rollback();
+      await tx.commit();
+      return { error: "OTP_INVALID" };
+    }
+
+    // 🔥 2. VERIFIED OTP
+    await new sql.Request(tx)
+      .input("id", record.otp_id)
+      .query(`
+        UPDATE Registration_Otps
+        SET otp_status = 'VERIFIED',
+            otp_used_at = GETDATE()
+        WHERE otp_id = @id
+      `);
+
+    // 🔥 3. Tạo user
+    const userInsert = await new sql.Request(tx)
+      .input("name", name)
+      .input("phone", phone)
+      .input("email", email)
+      .input("password", password)
+      .query(`
+        INSERT INTO Users (user_name, user_phone, user_email, user_password_hash, user_role_id)
+        OUTPUT INSERTED.user_id
+        VALUES (@name, @phone, @email, @password, 4)
+      `);
+
+    const userId = userInsert.recordset[0].user_id;
+    console.log("USER ID:", userId);
+
+
+    const customerRes = await createCustomer(userId);
+
+    if (!customerRes || customerRes.error) {
+      await tx.rollback();
+      return { error: "NOT_SERVICE" };
+    }
+
+    await tx.commit();
+
+
+    return { message: "OTP_VALID" };
+
+  } catch (err) {
+    try { await tx.rollback(); } catch {}
 
     throw err;
   }
-
-  return { message: "OTP_VALID" };
 };
 
 // ================== CONTROLLER ==================
@@ -193,6 +290,10 @@ router.post("/", async (req, res) => {
 
     if (result.error === "OTP_INVALID") {
       return res.status(400).json({ message: "OTP không đúng!" });
+    }
+
+    if (result.error === "NOT_SERVICE") {
+      return res.status(400).json({ message: "FIAL" });
     }
 
     return res.status(200).json({ message: "Xác nhận OTP thành công!" });

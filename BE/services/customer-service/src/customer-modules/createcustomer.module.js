@@ -28,10 +28,16 @@ const createCustomer = async (customer_user_id) => {
 // ================== SERVICE ==================
 
 const createCustomerService = async (data) => {
-  const existingCustomer = await checkCustomerExist(data.customer_user_id.user_id);
+  const customer_user_id = data.customer_user_id;
+
+  if (!customer_user_id) {
+    return { error: "MISSING_CUSTOMER_USER_ID" };
+  }
+
+  const existingCustomer = await checkCustomerExist(customer_user_id);
   if (existingCustomer) return { error: "EXISTING_CUSTOMER" };
 
-  await createCustomer(data.customer_user_id.user_id);
+  await createCustomer(customer_user_id);
 
   return { message: "CREATE_CUSTOMER_SUCCESSFULLY" };
 };

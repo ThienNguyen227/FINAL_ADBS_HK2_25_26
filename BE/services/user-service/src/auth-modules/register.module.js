@@ -40,7 +40,7 @@ const registerService = async (data) => {
       .input("email", data.email)
       .query(`
         SELECT 1
-        FROM Registration_Otps
+        FROM Registration_Otps WITH (UPDLOCK, HOLDLOCK)
         WHERE otp_user_email = @email
           AND otp_status = 'ACTIVE'
           AND otp_expired_at > GETDATE()
@@ -55,27 +55,43 @@ const registerService = async (data) => {
     const otp = generateOTP();
     const otpHash = await bcrypt.hash(otp, 10);
 
-    const resultInsert = await new sql.Request(tx)
+    const result = await new sql.Request(tx)
       .input("email", data.email)
       .input("otp", otpHash)
       .query(`
         DECLARE @expiredAt DATETIME = DATEADD(MINUTE, 2, GETDATE());
 
-        INSERT INTO Registration_Otps (otp_user_email, otp_code_hash, otp_expired_at)
-        VALUES (@email, @otp, @expiredAt);
+        -- 1. thử UPDATE trước
+        UPDATE Registration_Otps
+        SET otp_code_hash = @otp,
+            otp_created_at = GETDATE(),
+            otp_expired_at = @expiredAt
+        WHERE otp_user_email = @email
+          AND otp_status = 'ACTIVE'
+          AND otp_expired_at < GETDATE();
+
+        -- 2. nếu không có dòng nào bị update → INSERT
+        IF @@ROWCOUNT = 0
+        BEGIN
+            INSERT INTO Registration_Otps (
+              otp_user_email,
+              otp_code_hash,
+              otp_expired_at
+            )
+            VALUES (@email, @otp, @expiredAt);
+        END
       `);
 
-    const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
-    await tx.commit();
+      await tx.commit();
 
-    await sendOTPEmail(data.email, otp, "Mã OTP xác nhận đăng ký");
+      await sendOTPEmail(data.email, otp, "Mã OTP xác nhận đăng ký");
 
-    return { 
-      message: "OTP_SENT",
-      expiresAt
-    };
-
+      return { 
+        message: "OTP_SENT",
+        expiresAt
+      };
   } catch (err) {
     await tx.rollback();
 
@@ -86,7 +102,6 @@ const registerService = async (data) => {
     throw err;
   }
 };
-
 
 // ================== CONTROLLER ==================
 
