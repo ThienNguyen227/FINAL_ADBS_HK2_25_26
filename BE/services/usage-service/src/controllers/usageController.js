@@ -1,4 +1,5 @@
 const UsageReading = require("../models/UsageReading");
+const MonthlyUsageSummary = require("../models/MonthlyUsageSummary");
 
 // 1. Lấy danh sách bất thường (Anomaly Detection via Aggregation Pipeline)
 exports.getAnomalies = async (req, res) => {
@@ -221,3 +222,27 @@ exports.getSubstations = async (req, res) => {
   ];
   res.status(200).json({ success: true, data: substations });
 };
+
+// 6. LẤY TỔNG HỢP TIÊU THỤ THÁNG (Sử dụng Materialized View)
+exports.getMonthlySummary = async (req, res) => {
+  try {
+    const { month } = req.query; // Ví dụ: "2026-05"
+    const { meter_id } = req.query;
+
+    let query = {};
+    if (month) query.month = month;
+    if (meter_id) query.meter_id = meter_id;
+
+    const data = await MonthlyUsageSummary.find(query).sort({ month: -1 });
+
+    res.status(200).json({
+      success: true,
+      message: "Lấy dữ liệu tổng hợp tháng thành công",
+      count: data.length,
+      data
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
