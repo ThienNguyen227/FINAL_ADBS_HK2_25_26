@@ -9,6 +9,10 @@ app.use(cors({
   credentials: true
 }));
 
+const cookieParser = require("cookie-parser");
+
+app.use(cookieParser());
+
 app.use(express.json());
 
 app.use("/auth", authRoutes);
