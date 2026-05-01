@@ -245,7 +245,8 @@ router.post("/", async (req, res) => {
     res.cookie("refreshToken", result.refreshToken, {
       httpOnly: true,
       secure: false,
-      sameSite: "Strict",
+      // sameSite: "Strict",
+      sameSite: "Lax", // FIX
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 

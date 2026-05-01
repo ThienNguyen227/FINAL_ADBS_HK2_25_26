@@ -6,13 +6,25 @@ import { useAuth } from "../hooks/useAuth";
 
 export default function Header() {
 
-  const { user, logout } = useAuth();
+  const { user, logOut, loading, success, error } = useAuth();
 
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
+  const handleLogout = async () => {
+    try {
+      const res = await logOut();
+
+      if (!res?.error) {
+        sessionStorage.removeItem("token");
+
+        setTimeout(() => {
+          navigate("/login");
+        }, 2000); 
+      }
+
+    } catch {
+      alert("Đăng xuất thất bại");
+    }
   };
   
   // UI header
@@ -65,6 +77,7 @@ export default function Header() {
         </div>
         {/* 3. Logout button */}
         <button 
+          disabled={loading}
           onClick={handleLogout}
           style={{
             padding: '6px 16px',
@@ -79,8 +92,10 @@ export default function Header() {
           onMouseOver={(e) => e.target.style.backgroundColor = '#dc2626'}
           onMouseOut={(e) => e.target.style.backgroundColor = '#ef4444'}
         >
-          Đăng xuất
+          {loading ? "Đang đăng xuất ..." : "Đăng xuất"}
         </button>
+        {error && <p className="error">{error}</p>}
+        {success && <p className="success">{success}</p>}
       </div>
     </header>
   );

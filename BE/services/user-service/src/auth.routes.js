@@ -10,6 +10,7 @@ const resetPasswordRoute = require("./auth-modules/resetpassword.module")
 const loginRoute = require("./auth-modules/login.module")
 const meRoute = require("./auth-modules/me.module")
 const resendOTPRegisterRoute = require("./auth-modules/resend_otp_register.module")
+const logOutRoute = require("./auth-modules/logout.module")
 
 // API
 router.use("/register-request", registerRoute);
@@ -20,5 +21,5 @@ router.use("/reset-password-request", resetPasswordRoute);
 router.use("/login-request", loginRoute);
 router.use("/me-request", meRoute);
 router.use("/resend-otp-register-request", resendOTPRegisterRoute);
-
+router.use("/logout", logOutRoute);
 module.exports = router;
