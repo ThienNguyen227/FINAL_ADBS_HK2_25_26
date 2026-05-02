@@ -40,6 +40,10 @@ export const resendRegisterOTPAPI = async (data) => {
   return axios.post(`${API_URL}/resend-otp-register-request`, data);
 };
 
+export const resendForgotPasswordOTPAPI = async (data) => {
+  return axios.post(`${API_URL}/resend-otp-forgotpassword-request`, data);
+};
+
 export const logOutAPI = async () => {
   const token = sessionStorage.getItem("token");
 
