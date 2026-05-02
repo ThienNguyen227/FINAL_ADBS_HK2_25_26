@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { connectDB } = require("../config/db");
+const { sql, connectDB } = require("../config/db");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
@@ -26,17 +26,13 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-// ================== UPDATE CUSTOMER INFORMATION ==================
+// ================== UPDATE CUSTOMER ==================
 router.put("/", verifyToken, async (req, res) => {
+  const pool = await connectDB();
+  const transaction = new sql.Transaction(pool);
+
   try {
-    console.log("Query:", req.query);
-    console.log("Body:", req.body);
-    console.log("User từ token:", req.user);
-    const pool = await connectDB();
-
-    // 🔥 lấy user_id từ query hoặc token
     const userId = req.query.user_id || req.user.userId;
-
     const { customer_fullname, customer_address } = req.body;
 
     // ===== VALIDATE =====
@@ -46,24 +42,45 @@ router.put("/", verifyToken, async (req, res) => {
       });
     }
 
-    // ===== UPDATE =====
-    await pool.request()
-      .input("userId", userId)
-      .input("fullname", customer_fullname)
-      .input("address", customer_address || "")
+    // ===== START TRANSACTION =====
+    await transaction.begin(sql.ISOLATION_LEVEL.REPEATABLE_READ);
+
+    // ===== LOCK ROW (FAIL FAST IF BEING EDITED) =====
+    const customerCheck = await new sql.Request(transaction)
+      .input("userId", sql.Int, userId)
+      .query(`
+        SELECT customer_id
+        FROM Customers WITH (UPDLOCK, HOLDLOCK, NOWAIT)
+        WHERE customer_user_id = @userId
+      `);
+
+    if (!customerCheck.recordset[0]) {
+      await transaction.rollback();
+      return res.status(404).json({
+        message: "Customer not found",
+      });
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // ===== UPDATE CUSTOMER =====
+    await new sql.Request(transaction)
+      .input("userId", sql.Int, userId)
+      .input("fullname", sql.NVarChar, customer_fullname.trim())
+      .input("address", sql.NVarChar, customer_address || "")
       .query(`
         UPDATE Customers
-        SET 
+        SET
           customer_fullname = @fullname,
           customer_address = @address
         WHERE customer_user_id = @userId
       `);
 
     // ===== GET UPDATED DATA =====
-    const result = await pool.request()
-      .input("userId", userId)
+    const result = await new sql.Request(transaction)
+      .input("userId", sql.Int, userId)
       .query(`
-        SELECT 
+        SELECT
           customer_id,
           customer_user_id,
           customer_fullname,
@@ -72,16 +89,29 @@ router.put("/", verifyToken, async (req, res) => {
         FROM Customers
         WHERE customer_user_id = @userId
       `);
-    
-    const customer = result.recordset[0];
+
+    await transaction.commit();
 
     return res.status(200).json({
-      message: "Update successful",
-      customer,
+      message: "Cập nhật thông tin thành công!",
+      customer: result.recordset[0],
     });
 
   } catch (err) {
-    console.error(err);
+    if (transaction && !transaction._aborted) {
+      await transaction.rollback();
+    }
+
+    console.error("Update Customer Error:", err);
+
+    // ===== LOCK CONFLICT =====
+    if (err.number === 1222) {
+      return res.status(409).json({
+        message:
+          "Thông tin khách hàng đang được chỉnh sửa ở nơi khác. Vui lòng thử lại sau.",
+      });
+    }
+
     return res.status(500).json({
       message: "Internal Server Error",
       error: err.message,
@@ -90,3 +120,4 @@ router.put("/", verifyToken, async (req, res) => {
 });
 
 module.exports = router;
+
