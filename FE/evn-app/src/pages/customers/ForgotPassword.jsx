@@ -11,6 +11,7 @@ const ForgotPassword = () => {
 
   const [form, setForm] = useState({
     email: "",
+    newPassword: "",
   });
 
   const handleChange = (e) => {
@@ -22,8 +23,12 @@ const ForgotPassword = () => {
   
   // Kiểm tra điều kiện dữ liệu sơ bộ trong form
   const validate = () => {
-    if (!form.email) {
+    if (!form.email || !form.newPassword) {
       return "Vui lòng nhập đầy đủ thông tin!";
+    }
+
+    if (form.newPassword.length < 6) {
+      return "Mật khẩu phải có ít nhất 6 ký tự!";
     }
 
     return null;
@@ -47,6 +52,8 @@ const ForgotPassword = () => {
           state: {
             type: "FORGOT_PASSWORD",
             email: form.email, 
+            newPassword: form.newPassword,
+            expiresAt: res.expiresAt,
           },
         });
       }, 2000);
@@ -64,6 +71,14 @@ const ForgotPassword = () => {
             name="email"
             placeholder="Nhập Email"
             value={form.email}
+            onChange={handleChange}
+          />
+
+          <input
+            type="password"
+            name="newPassword"
+            placeholder="Nhập mật khẩu mới"
+            value={form.newPassword}
             onChange={handleChange}
           />
 
