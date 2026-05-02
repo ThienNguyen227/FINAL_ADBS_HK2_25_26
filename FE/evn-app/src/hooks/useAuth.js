@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { registerAPI, verifyOTPRegisterAPI, forgotPasswordAPI, verifyOTPForgotPasswordAPI, ResetPasswordAPI, resendRegisterOTPAPI, logOutAPI } from "../services/authService";
+import { registerAPI, verifyOTPRegisterAPI, forgotPasswordAPI, verifyOTPForgotPasswordAPI, ResetPasswordAPI, resendRegisterOTPAPI, resendForgotPasswordOTPAPI, logOutAPI } from "../services/authService";
 import { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 
@@ -124,6 +124,24 @@ export const useAuth = ()  => {
     }
   };
 
+  // 6. Resend OTP register
+  const resendForgotPasswordOTP = async (data) => {
+    try {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+      const res = await resendForgotPasswordOTPAPI(data);
+      setSuccess(res.data?.message);
+      return res.data;
+    } catch (err) {
+      const message = err.response?.data?.message || "OTP không hợp lệ";
+      setError(message);
+      return { error: message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 7. Logout
   const logOut = async (user_id) => {
     try {
@@ -172,6 +190,7 @@ export const useAuth = ()  => {
     success,
     error,
     resendRegisterOTP,
+    resendForgotPasswordOTP,
     logOut,
     // resendForgotPasswordOTP,
   };
