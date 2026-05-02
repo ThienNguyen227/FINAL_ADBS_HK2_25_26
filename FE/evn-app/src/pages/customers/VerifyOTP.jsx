@@ -7,8 +7,8 @@ import "../../styles/VerifyOTP.css";
 const VerifyOTP = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { type, name, phone, email, password, expiresAt: initExpiresAt } = location.state;
-  const { verifyOTP, verifyOTPForgotPassword, loading, error, success, resendRegisterOTP, } = useAuth(); 
+  const { type, name, phone, email, password, expiresAt: initExpiresAt, newPassword } = location.state;
+  const { verifyOTP, verifyOTPForgotPassword, loading, error, success, resendRegisterOTP, resendForgotPasswordOTP} = useAuth(); 
   const [otp, setOtp] = useState(new Array(6).fill(""));
 
   const [localInitExpiresAt, setLocalInitExpiresAt] = useState(initExpiresAt);
@@ -81,6 +81,7 @@ const VerifyOTP = () => {
     } else if (type === "FORGOT_PASSWORD") {
       res = await verifyOTPForgotPassword({
         email,
+        newPassword,
         otp: finalOTP,
       });
     }
@@ -90,9 +91,7 @@ const VerifyOTP = () => {
         if (type === "REGISTER") {
           navigate("/login");
         } else if (type === "FORGOT_PASSWORD") {
-          navigate("/reset-password", {
-            state: { email } 
-          });
+          navigate("/login");
         }
       }, 2000);
     }
@@ -107,6 +106,10 @@ const VerifyOTP = () => {
 
       if (type === "REGISTER") {
         res = await resendRegisterOTP({ email });
+      }
+
+      if (type === "FORGOT_PASSWORD") {
+        res = await resendForgotPasswordOTP({ email });
       }
 
       if (res?.expiresAt) {
