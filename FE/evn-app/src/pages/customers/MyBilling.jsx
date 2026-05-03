@@ -1,106 +1,180 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useAuth } from "../../hooks/useAuth";
+import { useCustomer } from "../../hooks/useCustomer";
+import { useBilling } from "../../hooks/useBilling";
+import "../../styles/MyBilling.css";
 
 export default function MyBilling() {
-  // 🔹 Fake data
-  const bills = [
-    {
-      id: 1,
-      month: "01/2026",
-      usage: 320,
-      amount: 750000,
-      status: "Paid",
-    },
-    {
-      id: 2,
-      month: "02/2026",
-      usage: 280,
-      amount: 680000,
-      status: "Unpaid",
-    },
-    {
-      id: 3,
-      month: "03/2026",
-      usage: 350,
-      amount: 820000,
-      status: "Unpaid",
-    },
-  ];
 
-  const [selectedBill, setSelectedBill] = useState(null);
+  const { user } = useAuth();
+
+  const {customer, getMoreInformation} = useCustomer();
+
+  const { invoices, getInvoices, loading } = useBilling();
+
+  const [openDetail, setOpenDetail] = useState(false);
+
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user?.user_id) return;
+      await getMoreInformation(user.user_id);
+    };
+
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.user_id]);
+
+  useEffect(() => {
+    if (!customer?.customer_id) return;
+    getInvoices(customer.customer_id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer?.customer_id]);
 
   return (
-    <div className="flex gap-6">
-      
-      {/* 🔥 Danh sách hóa đơn */}
-      <div className="w-1/2 bg-white p-4 rounded-xl shadow">
-        <h2 className="text-lg font-bold mb-4">My Bills</h2>
+    <>
+      <div className="table-container">
+        <h2>💡 Danh sách hóa đơn</h2>
 
-        <table className="w-full text-sm">
+        <table className="invoice-table">
           <thead>
-            <tr className="text-left border-b">
-              <th>Month</th>
-              <th>Usage (kWh)</th>
-              <th>Amount</th>
-              <th>Status</th>
+            <tr>
+              <th>Mã HĐ</th>
+              <th>Tháng</th>
+              <th>Sản lượng</th>
+              <th>Đơn giá</th>
+              <th>Tổng tiền</th>
+              <th>Trạng thái</th>
+              <th>Hành động</th>
             </tr>
           </thead>
 
           <tbody>
-            {bills.map((bill) => (
-              <tr
-                key={bill.id}
-                className="cursor-pointer hover:bg-gray-100"
-                onClick={() => setSelectedBill(bill)}
-              >
-                <td>{bill.month}</td>
-                <td>{bill.usage}</td>
-                <td>{bill.amount.toLocaleString()} đ</td>
-                <td
-                  className={
-                    bill.status === "Paid"
-                      ? "text-green-600"
-                      : "text-red-500"
-                  }
-                >
-                  {bill.status}
+            {invoices?.length > 0 ? (
+              invoices.map((item) => (
+                <tr key={item.invoice_id}>
+                  <td>{item.invoice_id}</td>
+
+                  <td>
+                    {new Date(item.invoice_month).toLocaleDateString("vi-VN", {
+                      month: "2-digit",
+                      year: "numeric"
+                    })}
+                  </td>
+
+                  <td>{item.invoice_total_usage} kWh</td>
+
+                  <td>
+                    {new Intl.NumberFormat("vi-VN").format(item.invoice_rate)} đ
+                  </td>
+
+                  <td>
+                    {new Intl.NumberFormat("vi-VN").format(item.invoice_total_amount)} đ
+                  </td>
+
+                  <td>
+                    <span className={`status ${item.invoice_status.toLowerCase()}`}>
+                      {item.invoice_status}
+                    </span>
+                  </td>
+
+                  <td>
+                    <button
+                      className="btn-view"
+                      onClick={() => {
+                        setSelectedInvoice(item);
+                        setOpenDetail(true);
+                      }}
+                    >
+                      Xem chi tiết
+                    </button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="7">
+                  {loading ? "Đang tải..." : "Không có hóa đơn nào"}
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* 🔥 Chi tiết hóa đơn */}
-      <div className="w-1/2 bg-white p-4 rounded-xl shadow">
-        <h2 className="text-lg font-bold mb-4">Bill Details</h2>
+      {/* DETAIL MODAL */}
+      {openDetail && selectedInvoice && (
+        <div className="modal-overlay">
+          <div className="modal-card detail-modal">
 
-        {selectedBill ? (
-          <div className="space-y-3">
-            <p><b>Month:</b> {selectedBill.month}</p>
-            <p><b>Usage:</b> {selectedBill.usage} kWh</p>
-            <p><b>Amount:</b> {selectedBill.amount.toLocaleString()} đ</p>
-            <p>
-              <b>Status:</b>{" "}
-              <span
-                className={
-                  selectedBill.status === "Paid"
-                    ? "text-green-600"
-                    : "text-red-500"
-                }
+            <div className="modal-header">
+              <h2>🧾 Chi tiết hóa đơn</h2>
+
+              <button
+                className="close-btn"
+                onClick={() => setOpenDetail(false)}
               >
-                {selectedBill.status}
-              </span>
-            </p>
+                ✕
+              </button>
+            </div>
 
-            <button className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-              Pay Now
-            </button>
+            <div className="modal-body">
+
+              <div className="info-grid">
+
+                <div className="info-item">
+                  <span className="label">Mã hóa đơn</span>
+                  <span>{selectedInvoice.invoice_id}</span>
+                </div>
+
+                <div className="info-item">
+                  <span className="label">Tháng</span>
+                  <span>
+                    {new Date(selectedInvoice.invoice_month).toLocaleDateString("vi-VN")}
+                  </span>
+                </div>
+
+                <div className="info-item">
+                  <span className="label">Sản lượng</span>
+                  <span>{selectedInvoice.invoice_total_usage} kWh</span>
+                </div>
+
+                <div className="info-item">
+                  <span className="label">Đơn giá</span>
+                  <span>
+                    {new Intl.NumberFormat("vi-VN").format(selectedInvoice.invoice_rate)} đ/kWh
+                  </span>
+                </div>
+
+                <div className="info-item">
+                  <span className="label">Tổng tiền</span>
+                  <span className="price">
+                    {new Intl.NumberFormat("vi-VN").format(selectedInvoice.invoice_total_amount)} đ
+                  </span>
+                </div>
+
+                <div className="info-item">
+                  <span className="label">Trạng thái</span>
+                  <span className={`status ${selectedInvoice.invoice_status.toLowerCase()}`}>
+                    {selectedInvoice.invoice_status}
+                  </span>
+                </div>
+
+              </div>
+            </div>
+
+            {selectedInvoice.invoice_status === "UNPAID" && (
+              <div className="modal-footer">
+                <button className="btn-success">
+                  Pay Now
+                </button>
+              </div>
+            )}
+
           </div>
-        ) : (
-          <p className="text-gray-500">Select a bill to view details</p>
-        )}
-      </div>
-
-    </div>
+        </div>
+      )}
+    </>
   );
 }
