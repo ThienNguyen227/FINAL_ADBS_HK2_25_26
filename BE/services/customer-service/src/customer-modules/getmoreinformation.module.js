@@ -37,14 +37,18 @@ router.get("/", verifyToken, async (req, res) => {
     const result = await pool.request()
       .input("userId", userId)
       .query(`
-        SELECT 
-          customer_id,
-          customer_user_id,
-          customer_fullname,
-          customer_address,
-          customer_priority
-        FROM Customers
-        WHERE customer_user_id = @userId
+        SELECT TOP 1
+          c.customer_id,
+          c.customer_user_id,
+          c.customer_fullname,
+          c.customer_address,
+          c.customer_priority,
+          con.contract_rate,
+          con.contract_type_id
+        FROM Customers c
+        LEFT JOIN Contracts con ON c.customer_id = con.contract_customer_id
+        WHERE c.customer_user_id = @userId
+        ORDER BY con.contract_created_at DESC
       `);
 
     const customer = result.recordset[0];

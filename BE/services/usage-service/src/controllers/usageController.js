@@ -74,51 +74,41 @@ exports.recordUsage = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // Auto-seed: Đảm bảo khu vực này có dữ liệu "hàng xóm" nền
-    const bgCheck = await UsageReading.findOne({ 
-      meter_id: `METER_BG_2_${neighborhood_id}`, 
-      day: startOfDay 
-    });
-    if (!bgCheck) {
-      const bgOps = [];
-      // Tọa độ gốc (nếu có), dùng để sinh tọa độ lân cận cho hàng xóm
-      const baseLng = longitude ? Number(longitude) : 106.7009;
-      const baseLat = latitude ? Number(latitude) : 10.7769;
-      
-      for (let i = 2; i <= 11; i++) {
-        const readings = [];
-        for (let h = 0; h < 24; h++) {
-          const ts = new Date(startOfDay);
-          ts.setHours(h, 0, 0, 0);
-          readings.push({ timestamp: ts, usage: parseFloat((Math.random() * 1 + 0.5).toFixed(2)) });
-        }
-        const total = readings.reduce((s, r) => s + r.usage, 0);
-        
-        // Sinh tọa độ ngẫu nhiên trong bán kính ~1-3km quanh tọa độ gốc
-        const offsetLng = (Math.random() - 0.5) * 0.04;
-        const offsetLat = (Math.random() - 0.5) * 0.04;
+    // ================== ĐỒNG BỘ HÓA DỮ LIỆU HÀNG XÓM (REAL-TIME SIMULATION) ==================
+    // Mỗi khi người dùng thật gửi 1 bản ghi, tự động cập nhật 10 hàng xóm ảo trong cùng khu vực
+    const bgOps = [];
+    const baseLng = longitude ? Number(longitude) : 106.7009;
+    const baseLat = latitude ? Number(latitude) : 10.7769;
 
-        bgOps.push({
-          updateOne: {
-            filter: { meter_id: `METER_BG_${i}_${neighborhood_id}`, day: startOfDay },
-            update: { 
-              $setOnInsert: { 
-                neighborhood_id, 
-                readings, 
-                total_daily_usage: parseFloat(total.toFixed(2)), 
-                reading_count: readings.length,
-                location: {
-                  type: "Point",
-                  coordinates: [baseLng + offsetLng, baseLat + offsetLat]
-                }
-              } 
+    for (let i = 2; i <= 11; i++) {
+      const bgMeterId = `METER_BG_${i}_${neighborhood_id}`;
+      const bgUsage = parseFloat((Math.random() * 0.25 + 0.1).toFixed(2)); // Tiêu thụ ảo ngẫu nhiên
+
+      // Sinh tọa độ ngẫu nhiên nếu là lần đầu tạo đồng hồ này (upsert)
+      const offsetLng = (Math.random() - 0.5) * 0.02;
+      const offsetLat = (Math.random() - 0.5) * 0.02;
+
+      bgOps.push({
+        updateOne: {
+          filter: { meter_id: bgMeterId, day: startOfDay },
+          update: {
+            $setOnInsert: { 
+              neighborhood_id: neighborhood_id,
+              location: {
+                type: "Point",
+                coordinates: [baseLng + offsetLng, baseLat + offsetLat]
+              }
             },
-            upsert: true
-          }
-        });
-      }
-      await UsageReading.bulkWrite(bgOps);
+            $push: { readings: { timestamp: readingTime, usage: bgUsage } },
+            $inc: { total_daily_usage: bgUsage, reading_count: 1 }
+          },
+          upsert: true
+        }
+      });
     }
+
+    // Thực hiện cập nhật đồng loạt hàng xóm ảo
+    await UsageReading.bulkWrite(bgOps);
 
     res.status(200).json({ success: true, message: "Reading recorded successfully", current_count: result.reading_count });
   } catch (error) {

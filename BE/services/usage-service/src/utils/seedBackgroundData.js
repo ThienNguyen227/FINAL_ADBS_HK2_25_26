@@ -30,10 +30,10 @@ async function seedBackgroundData() {
         const meterId = `METER_BG_${i}_${nb.id}`;
         
         const readings = [];
-        for (let h = 0; h < 24; h++) {
+        for (let j = 0; j < 96; j++) {
           const ts = new Date(today);
-          ts.setHours(h, 0, 0, 0);
-          const normalUsage = parseFloat((Math.random() * (1.5 - 0.5) + 0.5).toFixed(2));
+          ts.setMinutes(j * 15);
+          const normalUsage = parseFloat((Math.random() * 0.25 + 0.1).toFixed(2));
           readings.push({ timestamp: ts, usage: normalUsage });
         }
         const totalUsage = readings.reduce((sum, r) => sum + r.usage, 0);

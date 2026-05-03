@@ -6,6 +6,97 @@ import {
   Slider, Grid
 } from "@mui/material";
 
+// ================== COMPONENT BẢN ĐỒ GIẢ LẬP (SVG BASED) ==================
+function SimulatedMap({ center, radiusKm, meters, avgUsage }) {
+  const width = 800; // Tăng kích thước bản đồ
+  const height = 500;
+  const centerX = width / 2;
+  const centerY = height / 2;
+
+  // Tỷ lệ Zoom
+  const scale = (height / 2 - 50) / radiusKm;
+
+  // Chuyển đổi GPS sang Pixel
+  const getCoords = (lng, lat) => {
+    const dLng = lng - center.longitude;
+    const dLat = lat - center.latitude;
+    const dy = dLat * 111.32;
+    const dx = dLng * (40075 * Math.cos((center.latitude * Math.PI) / 180) / 360);
+    return { x: centerX + dx * scale, y: centerY - dy * scale };
+  };
+
+  const getSeverityColor = (usage) => {
+    if (usage > avgUsage * 3) return "#f44336"; // Đỏ
+    if (usage > avgUsage * 2) return "#ff9800"; // Vàng
+    return "#4caf50"; // Xanh
+  };
+
+  return (
+    <Card sx={{ mb: 4, overflow: "hidden", border: "1px solid #e0e0e0", boxShadow: 4, borderRadius: 3 }}>
+      <Box sx={{ p: 2, bgcolor: "#1a237e", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Typography variant="subtitle1" fontWeight="bold">🗺️ Bản đồ tải điện (Bán kính {radiusKm}km)</Typography>
+        <Box sx={{ display: "flex", gap: 2 }}>
+          <Chip label="Bình thường" size="small" sx={{ bgcolor: "#4caf50", color: "white" }} />
+          <Chip label="Cảnh báo" size="small" sx={{ bgcolor: "#ff9800", color: "white" }} />
+          <Chip label="Quá tải" size="small" sx={{ bgcolor: "#f44336", color: "white" }} />
+        </Box>
+      </Box>
+
+      <Box sx={{ bgcolor: "#f5f5f5", display: "flex", justifyContent: "center", p: 3 }}>
+        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ backgroundColor: "#e3f2fd", borderRadius: "12px", border: "2px solid #90caf9" }}>
+          <defs>
+            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#cfd8dc" strokeWidth="0.5" />
+            </pattern>
+            <radialGradient id="radarGradient">
+              <stop offset="0%" stopColor="#2196f3" stopOpacity="0.2" />
+              <stop offset="100%" stopColor="#2196f3" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid)" />
+
+          {/* Radar Circles */}
+          {[0.2, 0.4, 0.6, 0.8, 1].map((p) => (
+            <circle key={p} cx={centerX} cy={centerY} r={radiusKm * scale * p} fill="none" stroke="#bbdefb" strokeWidth="1" strokeDasharray="4" />
+          ))}
+
+          {/* Vùng quét */}
+          <circle cx={centerX} cy={centerY} r={radiusKm * scale} fill="url(#radarGradient)" stroke="#2196f3" strokeWidth="2" />
+
+          {/* Meters */}
+          {meters.map((meter, i) => {
+            const pos = getCoords(meter.location.coordinates[0], meter.location.coordinates[1]);
+            const color = getSeverityColor(meter.total_daily_usage);
+            const isCritical = color === "#f44336";
+            return (
+              <g key={i}>
+                <circle cx={pos.x} cy={pos.y} r={isCritical ? 8 : 6} fill={color} stroke="white" strokeWidth="2">
+                  <title>{`${meter.meter_id}\nTiêu thụ: ${meter.total_daily_usage.toFixed(2)}kWh`}</title>
+                </circle>
+                {isCritical && (
+                  <circle cx={pos.x} cy={pos.y} r={8} fill="none" stroke="#f44336" strokeWidth="2">
+                    <animate attributeName="r" from="8" to="20" dur="1s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" from="0.8" to="0" dur="1s" repeatCount="indefinite" />
+                  </circle>
+                )}
+              </g>
+            );
+          })}
+
+          {/* Trạm biến áp (Icon Trung tâm) */}
+          <g>
+            <rect x={centerX - 15} y={centerY - 15} width={30} height={30} rx={4} fill="#c62828" stroke="white" strokeWidth="2" />
+            <text x={centerX} y={centerY + 4} textAnchor="middle" fontSize="18" fill="white" fontWeight="bold">⚡</text>
+            <text x={centerX} y={centerY + 35} textAnchor="middle" fontSize="14" fontWeight="bold" fill="#1a237e">
+              {center.name}
+            </text>
+          </g>
+        </svg>
+      </Box>
+    </Card>
+  );
+}
+
 export default function GeoMonitoring() {
   const [substations, setSubstations] = useState([]);
   const [selectedStation, setSelectedStation] = useState(null);
@@ -129,11 +220,18 @@ export default function GeoMonitoring() {
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>❌ {error}</Alert>}
 
-      {/* KẾT QUẢ */}
       {results && (
         <>
-          {/* SUMMARY CARDS */}
-          <Grid container spacing={2} sx={{ mb: 4 }}>
+          {/* BẢN ĐỒ GIẢ LẬP - TRỰC QUAN HÓA KHÔNG GIAN */}
+          <SimulatedMap
+            center={selectedStation}
+            radiusKm={radiusKm}
+            meters={results.all_meters}
+            avgUsage={results.summary.avg_usage_kwh}
+          />
+
+          {/* TỔNG QUAN KẾT QUẢ */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
             <Grid size={{ xs: 6, md: 3 }}>
               <Card sx={{ textAlign: "center", bgcolor: "#e3f2fd", border: "1px solid #90caf9" }}>
                 <CardContent>
