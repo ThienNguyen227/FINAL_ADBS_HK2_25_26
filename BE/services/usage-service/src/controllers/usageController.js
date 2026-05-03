@@ -116,6 +116,17 @@ exports.recordUsage = async (req, res) => {
   }
 };
 
+// 6. TRIGGER THỦ CÔNG VIỆC TỔNG HỢP DỮ LIỆU THÁNG (Materialized View)
+exports.triggerAggregation = async (req, res) => {
+  try {
+    const { aggregateMonthlyUsage } = require("../utils/aggregationWorker");
+    await aggregateMonthlyUsage();
+    res.status(200).json({ success: true, message: "Đã kích hoạt tổng hợp dữ liệu tháng thành công!" });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // 3. XEM LỊCH SỬ TIÊU THỤ CỦA 1 KHÁCH HÀNG
 exports.getUsageHistory = async (req, res) => {
   try {
