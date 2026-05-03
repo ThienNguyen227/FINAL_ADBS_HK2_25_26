@@ -16,16 +16,7 @@ async function aggregateMonthlyUsage() {
     // Aggregation Pipeline
     const pipeline = [
       {
-        // 1. Lọc dữ liệu của tháng hiện tại
-        $match: {
-          day: {
-            $gte: new Date(now.getFullYear(), now.getMonth(), 1),
-            $lt: new Date(now.getFullYear(), now.getMonth() + 1, 1)
-          }
-        }
-      },
-      {
-        // 2. Gom nhóm theo meter_id và tháng
+        // 1. Gom nhóm theo meter_id và tháng (Bỏ lọc $match tháng hiện tại để tính tất cả lịch sử)
         $group: {
           _id: {
             meter_id: "$meter_id",

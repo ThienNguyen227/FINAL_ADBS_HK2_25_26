@@ -8,5 +8,7 @@ router.get("/history/:meter_id", usageController.getUsageHistory);
 router.get("/geo-search", usageController.geoSearch);
 router.get("/substations", usageController.getSubstations);
 router.get("/monthly-summary", usageController.getMonthlySummary);
+router.get("/trigger-aggregation", usageController.triggerAggregation);
 
 module.exports = router;
+

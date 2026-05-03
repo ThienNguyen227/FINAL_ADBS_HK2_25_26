@@ -24,7 +24,11 @@ export default function MyUsage() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [neighborhoodId, setNeighborhoodId] = useState(null);
+    const [neighborhoodId, setNeighborhoodId] = useState(null);
+   const [unitPrice, setUnitPrice] = useState(1500);
+   const [simulationDate, setSimulationDate] = useState(new Date().toISOString().split('T')[0]); // Mặc định là hôm nay
+
+
 
   // Sinh meter_id từ user_id thực tế đang đăng nhập
   const userMeterId = user ? `METER_${user.user_id}` : null;
@@ -38,8 +42,16 @@ export default function MyUsage() {
     })
       .then(res => res.json())
       .then(data => {
-        if (data.customer && data.customer.customer_address) {
-          setNeighborhoodId(data.customer.customer_address);
+        if (data.customer) {
+          if (data.customer.customer_address) {
+            setNeighborhoodId(data.customer.customer_address);
+          } else {
+            setNeighborhoodId("KHU_VUC_MAC_DINH");
+          }
+          // Lấy giá tiền từ hợp đồng trong SQL
+          if (data.customer.contract_rate) {
+            setUnitPrice(data.customer.contract_rate);
+          }
         } else {
           setNeighborhoodId("KHU_VUC_MAC_DINH");
         }
@@ -70,7 +82,19 @@ export default function MyUsage() {
   const isMaxedOut = currentCount >= 96;
 
   const handleSimulateReading = async () => {
-    if (isMaxedOut || !userMeterId || !neighborhoodId) return;
+    if (!userMeterId || !neighborhoodId) return;
+
+    // Tính toán thời gian giả lập dựa trên simulationDate
+    // Nếu là ngày hôm nay, lấy giờ hiện tại. Nếu là ngày khác, giả lập giờ ngẫu nhiên.
+    const isToday = simulationDate === new Date().toISOString().split('T')[0];
+    const targetTimestamp = new Date(simulationDate);
+    if (isToday) {
+      const now = new Date();
+      targetTimestamp.setHours(now.getHours(), now.getMinutes());
+    } else {
+      targetTimestamp.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60));
+    }
+
 
     try {
       // 10% cơ hội sinh ra dữ liệu bất thường (từ 5.0 đến 8.0 kWh) để test trang Anomaly
@@ -80,11 +104,6 @@ export default function MyUsage() {
         ? (Math.random() * (8.0 - 5.0) + 5.0).toFixed(2)
         : (Math.random() * (1.5 - 0.5) + 0.5).toFixed(2);
 
-      // Tính toán thời gian giả lập dựa vào số lượng reading hiện tại (currentCount)
-      const simulateDate = new Date();
-      simulateDate.setHours(0, 0, 0, 0); // Bắt đầu từ 00:00:00 hôm nay
-      simulateDate.setMinutes(currentCount * 15); // Mỗi lần nhấn + thêm 15 phút
-
       await fetch("http://localhost:3004/api/usage/record", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -92,7 +111,7 @@ export default function MyUsage() {
           meter_id: userMeterId,
           neighborhood_id: neighborhoodId,
           usage: randomUsage,
-          timestamp: simulateDate.toISOString(),
+          timestamp: targetTimestamp.toISOString(), // Sử dụng ngày người dùng đã chọn
           longitude: 106.7009 + (Math.random() - 0.5) * 0.03,
           latitude: 10.7769 + (Math.random() - 0.5) * 0.03
         })
@@ -130,15 +149,29 @@ export default function MyUsage() {
         <Typography variant="h4" fontWeight="bold" color="primary">
           📊 Lịch sử tiêu thụ điện của tôi
         </Typography>
-        <Button
-          variant="contained"
-          color="secondary"
-          onClick={handleSimulateReading}
-          disabled={isMaxedOut || !neighborhoodId}
-          sx={{ fontWeight: 'bold' }}
-        >
-          {isMaxedOut ? "✅ Đã đạt tối đa (96/96)" : "⏱️ Giả lập đo lường 15p"}
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <input
+            type="date"
+            value={simulationDate}
+            onChange={(e) => setSimulationDate(e.target.value)}
+            style={{ 
+              padding: '8px', 
+              borderRadius: '4px', 
+              border: '1px solid #ccc',
+              fontFamily: 'inherit' 
+            }}
+          />
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleSimulateReading}
+            disabled={!neighborhoodId}
+            sx={{ fontWeight: 'bold' }}
+          >
+            {isMaxedOut && isToday ? "✅ Đã đạt tối đa hôm nay" : "⏱️ Giả lập đo lường 15p"}
+          </Button>
+        </Box>
+
       </Box>
 
       {/* Thông tin đồng hồ hiện tại */}
@@ -194,7 +227,8 @@ export default function MyUsage() {
             </TableHead>
             <TableBody>
               {history.map((doc, idx) => {
-                const estimatedCost = doc.total_daily_usage * 1500;
+                const estimatedCost = doc.total_daily_usage * unitPrice;
+
                 return (
                   <TableRow key={idx}>
                     <TableCell component="th" scope="row">
@@ -209,11 +243,18 @@ export default function MyUsage() {
                       {doc.reading_count} / 96 (Chu kỳ)
                     </TableCell>
                     <TableCell align="right">
-                      <Typography fontWeight="bold" color={estimatedCost > 50000 ? "error.main" : "text.primary"}>
-                        {estimatedCost.toLocaleString('vi-VN')} đ
+                      <Typography 
+                        fontWeight="bold" 
+                        color={estimatedCost > 50000 ? "error.main" : "primary.main"}
+                      >
+                        {estimatedCost.toLocaleString()} VNĐ
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        (Giá: {unitPrice}đ/kWh)
                       </Typography>
                     </TableCell>
                   </TableRow>
+
                 );
               })}
             </TableBody>
