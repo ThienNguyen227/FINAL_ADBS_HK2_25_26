@@ -12,10 +12,15 @@ app.use(cors());
 app.use(express.json());
 
 // Connect DB rồi seed dữ liệu nền + chạy Background Jobs
+// connectDB().then(() => {
+//   seedBackgroundData();
+//   startCronJobs();
+// });
 connectDB().then(() => {
-  seedBackgroundData();
+  // seedBackgroundData(); // Đã tắt tự động tạo 30 đồng hồ ảo khi khởi động
   startCronJobs();
 });
+
 
 // Routes
 app.use("/api/usage", usageRoutes);

@@ -9,6 +9,8 @@ router.get("/geo-search", usageController.geoSearch);
 router.get("/substations", usageController.getSubstations);
 router.get("/monthly-summary", usageController.getMonthlySummary);
 router.get("/trigger-aggregation", usageController.triggerAggregation);
+router.get("/all-status", usageController.getAllMetersStatus);
+
 
 module.exports = router;
 
