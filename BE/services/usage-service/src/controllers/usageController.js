@@ -110,6 +110,31 @@ exports.recordUsage = async (req, res) => {
     // Thực hiện cập nhật đồng loạt hàng xóm ảo
     await UsageReading.bulkWrite(bgOps);
 
+    const monthKey = `${readingTime.getFullYear()}-${String(
+      readingTime.getMonth() + 1
+    ).padStart(2, "0")}`;
+
+    // update cho meter thật
+    await MonthlyUsageSummary.findOneAndUpdate(
+      {
+        meter_id,
+        month: monthKey
+      },
+      {
+        $set: {
+          neighborhood_id,
+          last_updated: new Date()
+        },
+        $inc: {
+          total_monthly_usage: Number(usage)
+        }
+      },
+      {
+        upsert: true,
+        new: true
+      }
+    );
+
     res.status(200).json({ success: true, message: "Reading recorded successfully", current_count: result.reading_count });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });

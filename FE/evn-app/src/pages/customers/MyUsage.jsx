@@ -70,39 +70,91 @@ export default function MyUsage() {
       } else {
         setError("Lấy dữ liệu lịch sử thất bại");
       }
-    } catch (err) {
+    } catch {
       setError("Lỗi mạng. Vui lòng kiểm tra lại kết nối.");
     } finally {
       setLoading(false);
     }
   };
 
-  const todayBucket = history.length > 0 ? history[0] : null;
-  const currentCount = todayBucket ? todayBucket.reading_count : 0;
+  // const todayBucket = history.length > 0 ? history[0] : null;
+  // const currentCount = todayBucket ? todayBucket.reading_count : 0;
+  // const isMaxedOut = currentCount >= 96;
+
+  // const isToday = simulationDate === new Date().toISOString().split('T')[0];
+
+  // const handleSimulateReading = async () => {
+  //   if (!userMeterId || !neighborhoodId) return;
+
+  //   // Tính toán thời gian giả lập dựa trên simulationDate
+  //   // Nếu là ngày hôm nay, lấy giờ hiện tại. Nếu là ngày khác, giả lập giờ ngẫu nhiên.
+  //   // const isToday = simulationDate === new Date().toISOString().split('T')[0];
+  //   const targetTimestamp = new Date(simulationDate);
+  //   // if (isToday) {
+  //   //   const now = new Date();
+  //   //   targetTimestamp.setHours(now.getHours(), now.getMinutes());
+  //   // } else {
+  //   //   targetTimestamp.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60));
+  //   // }
+
+  //   // if (isToday) {
+  //   //   const slot = currentCount;
+
+  //   //   targetTimestamp.setHours(
+  //   //     Math.floor(slot / 4),
+  //   //     (slot % 4) * 15,
+  //   //     0,
+  //   //     0
+  //   //   );
+  //   // } else {
+  //   //   targetTimestamp.setHours(
+  //   //     Math.floor(Math.random() * 24),
+  //   //     Math.floor(Math.random() * 60),
+  //   //     0,
+  //   //     0
+  //   //   );
+  //   // }
+
+  // const todayBucket = history.length > 0 ? history[0] : null;
+  // const currentCount = todayBucket ? todayBucket.reading_count : 0;
+  const selectedBucket = history.find(doc => {
+    const d = new Date(doc.day);
+    const docDate =
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    return docDate === simulationDate;
+  });
+
+  const currentCount = selectedBucket ? selectedBucket.reading_count : 0;
   const isMaxedOut = currentCount >= 96;
 
+  // dùng local date thay vì toISOString()
+  const today = new Date();
+  const localToday =
+    `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  const isToday = simulationDate === localToday;
+
   const handleSimulateReading = async () => {
-    if (!userMeterId || !neighborhoodId) return;
+    if (!userMeterId || !neighborhoodId || currentCount >= 96) return;
 
-    // Tính toán thời gian giả lập dựa trên simulationDate
-    // Nếu là ngày hôm nay, lấy giờ hiện tại. Nếu là ngày khác, giả lập giờ ngẫu nhiên.
-    const isToday = simulationDate === new Date().toISOString().split('T')[0];
-    const targetTimestamp = new Date(simulationDate);
-    if (isToday) {
-      const now = new Date();
-      targetTimestamp.setHours(now.getHours(), now.getMinutes());
-    } else {
-      targetTimestamp.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60));
-    }
+    const [year, month, day] = simulationDate.split("-").map(Number);
+    const targetTimestamp = new Date(year, month - 1, day);
 
+    const slot = currentCount;
+
+    targetTimestamp.setHours(
+      Math.floor(slot / 4),
+      (slot % 4) * 15,
+      0,
+      0
+    );
 
     try {
-      // 10% cơ hội sinh ra dữ liệu bất thường (từ 5.0 đến 8.0 kWh) để test trang Anomaly
-      // 90% cơ hội là tiêu thụ bình thường (từ 0.5 đến 1.5 kWh)
       const isAnomaly = Math.random() < 0.1;
       const randomUsage = isAnomaly
-        ? (Math.random() * (8.0 - 5.0) + 5.0).toFixed(2)
-        : (Math.random() * (1.5 - 0.5) + 0.5).toFixed(2);
+        ? (Math.random() * 3 + 5).toFixed(2)
+        : (Math.random() + 0.5).toFixed(2);
 
       await fetch("http://localhost:3004/api/usage/record", {
         method: "POST",
@@ -111,14 +163,15 @@ export default function MyUsage() {
           meter_id: userMeterId,
           neighborhood_id: neighborhoodId,
           usage: randomUsage,
-          timestamp: targetTimestamp.toISOString(), // Sử dụng ngày người dùng đã chọn
+          timestamp: targetTimestamp.getTime(),
           longitude: 106.7009 + (Math.random() - 0.5) * 0.03,
           latitude: 10.7769 + (Math.random() - 0.5) * 0.03
         })
       });
+
       fetchHistory();
     } catch (err) {
-      console.error("Giả lập đo lường thất bại", err);
+      console.error(err);
     }
   };
 
@@ -165,7 +218,7 @@ export default function MyUsage() {
             variant="contained"
             color="secondary"
             onClick={handleSimulateReading}
-            disabled={!neighborhoodId}
+            disabled={!neighborhoodId || currentCount >= 96}
             sx={{ fontWeight: 'bold' }}
           >
             {isMaxedOut && isToday ? "✅ Đã đạt tối đa hôm nay" : "⏱️ Giả lập đo lường 15p"}
