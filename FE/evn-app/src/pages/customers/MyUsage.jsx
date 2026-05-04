@@ -28,7 +28,8 @@ export default function MyUsage() {
   const [unitPrice, setUnitPrice] = useState(1500);
   const [simulationDate, setSimulationDate] = useState(new Date().toISOString().split('T')[0]); // Mặc định là hôm nay
   const [simulationMode, setSimulationMode] = useState(1); // 1: Bình thường, 2: Lỗi cá nhân, 3: Lỗi khu vực
-
+  const [hasContract, setHasContract] = useState(false);
+  const [checkingContract, setCheckingContract] = useState(true);
 
 
 
@@ -78,6 +79,29 @@ export default function MyUsage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!user) return;
+
+    const token = sessionStorage.getItem("token");
+
+    fetch(`http://localhost:3001/customer/check-contract?user_id=${user.user_id}`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
+      .then(res => res.json())
+      .then(data => {
+        setHasContract(data.hasContract);
+      })
+      .catch(() => {
+        setHasContract(false);
+      })
+      .finally(() => {
+        setCheckingContract(false);
+      });
+
+  }, [user]);
 
   // Tìm dữ liệu của ngày đang chọn trong danh sách lịch sử (So sánh theo local date)
   const selectedDayBucket = history.find(h => {
@@ -181,7 +205,7 @@ export default function MyUsage() {
             <option value={4}>⚫ Chế độ 4: Mất điện cá nhân (Tiêu thụ = 0)</option>
             <option value={5}>🚫 Chế độ 5: Mất điện toàn khu (Tất cả = 0)</option>
           </select>
-          <Button
+          {/* <Button
             variant="contained"
             color="secondary"
             onClick={handleSimulateReading}
@@ -189,6 +213,26 @@ export default function MyUsage() {
             sx={{ fontWeight: 'bold' }}
           >
             {isMaxedOut ? "✅ Đã xong 24h" : "Giả lập 15p"}
+          </Button> */}
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleSimulateReading}
+            disabled={
+              !neighborhoodId ||
+              isMaxedOut ||
+              !hasContract ||
+              checkingContract
+            }
+            sx={{ fontWeight: "bold" }}
+          >
+            {checkingContract
+              ? "Đang kiểm tra..."
+              : !hasContract
+              ? "Chưa có hợp đồng"
+              : isMaxedOut
+              ? "✅ Đã xong 24h"
+              : "Giả lập 15p"}
           </Button>
         </Box>
 
