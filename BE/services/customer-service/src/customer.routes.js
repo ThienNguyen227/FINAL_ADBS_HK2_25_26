@@ -22,6 +22,12 @@ const getContractRoute = require("./customer-modules/getcontract.module");
 // 6. 
 const cancelContractRoute = require("./customer-modules/cancelcontract.module");
 
+// 7.
+const invoiceInforRoute = require("./customer-modules/get_customer_contract_id.module");
+
+// 8.
+const checkContractRoute = require("./customer-modules/check-contract.module");
+
 
 
 // .
@@ -45,8 +51,11 @@ router.use("/get-contract", getContractRoute);
 // 6.
 router.use("/cancel-contract", cancelContractRoute);
 
+// 7.
+router.use("/customer-contract-id", invoiceInforRoute);
 
-
+// 8.
+router.use("/check-contract", checkContractRoute);
 
 
 
