@@ -283,6 +283,24 @@ exports.recordUsage = async (req, res) => {
 
     await UsageReading.bulkWrite(bgOps);
 
+    // ==========================================
+    // TỰ ĐỘNG KÍCH HOẠT LỚP 2 (BATCH JOB) KHI HẾT NGÀY (96/96)
+    // ==========================================
+    if (result.reading_count >= 96) {
+      console.log(`[Batch Job - AUTO] Đồng hồ ${meter_id} đã đủ 96 chỉ số. Kích hoạt tính toán lại Baseline và Tổng hợp tháng...`);
+      const { calculateMeterBaselines, aggregateMonthlyUsage } = require("../utils/aggregationWorker");
+      
+      // Chạy cả 2 tác vụ bất đồng bộ
+      Promise.all([
+        calculateMeterBaselines(),
+        aggregateMonthlyUsage()
+      ]).then(() => {
+        console.log("[Batch Job - AUTO] Đã hoàn thành cập nhật Baseline và Monthly Summary.");
+      }).catch(err => {
+        console.error("[Batch Job - AUTO] Lỗi khi chạy tác vụ tự động:", err);
+      });
+    }
+
     // Thêm log để mô phỏng Alert nếu có
     res.status(200).json({ 
       success: true, 

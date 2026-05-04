@@ -81,6 +81,11 @@ export default function MyUsage() {
 
   const todayBucket = history.length > 0 ? history[0] : null;
   const currentCount = todayBucket ? todayBucket.reading_count : 0;
+
+  // Kiểm tra xem ngày đang chọn có phải là hôm nay không
+  const isToday = simulationDate === new Date().toISOString().split('T')[0];
+
+  // Kiểm tra xem đã đạt giới hạn 96 lần đo (24h) chưa
   const isMaxedOut = currentCount >= 96;
 
   const handleSimulateReading = async () => {
@@ -147,7 +152,7 @@ export default function MyUsage() {
   }
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1000, margin: '0 auto' }}>
+    <Box sx={{ p: 3, maxWidth: 1400, margin: '0 auto' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h4" fontWeight="bold" color="primary">
           📊 Lịch sử tiêu thụ điện của tôi
@@ -179,10 +184,10 @@ export default function MyUsage() {
             variant="contained"
             color="secondary"
             onClick={handleSimulateReading}
-            disabled={!neighborhoodId}
+            disabled={!neighborhoodId || isMaxedOut}
             sx={{ fontWeight: 'bold' }}
           >
-            {isMaxedOut && isToday ? "✅ Đã đạt tối đa hôm nay" : "Giả lập"}
+            {isMaxedOut ? "✅ Đã xong 24h" : "Giả lập 15p"}
           </Button>
         </Box>
 
