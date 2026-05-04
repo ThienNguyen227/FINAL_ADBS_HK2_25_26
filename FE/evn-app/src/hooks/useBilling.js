@@ -1,5 +1,5 @@
 import { useState} from "react";
-import { getInvoicesAPI } from "../services/billingService";
+import { getInvoicesAPI, createPaymentAPI } from "../services/billingService";
 
 export const useBilling = () => {
 
@@ -26,12 +26,33 @@ export const useBilling = () => {
             setLoading(false);
         }
     };
-  
-  return {
-    loading,
-    error,
-    // success,
-    getInvoices,
-    invoices,
-  };
+
+    const createPayment = async (invoice_id) => {
+        try {
+            setLoading(true);
+            setError(null);
+
+            const res = await createPaymentAPI(invoice_id);
+
+            return res.data;
+
+        } catch (err) {
+            const message =
+            err.response?.data?.message || "Lỗi tạo thanh toán";
+
+            setError(message);
+            throw err;
+
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    return {
+        loading,
+        error,
+        getInvoices,
+        invoices,
+        createPayment,
+    };
 };

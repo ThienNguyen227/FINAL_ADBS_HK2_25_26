@@ -10,11 +10,14 @@ export default function MyBilling() {
 
   const {customer, getMoreInformation} = useCustomer();
 
-  const { invoices, getInvoices, loading } = useBilling();
+  const { invoices, getInvoices, loading, createPayment, success, error } = useBilling();
 
   const [openDetail, setOpenDetail] = useState(false);
 
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+
+  const [successPayment, setSuccessPayment] = useState(null);
+  const [errorPayment, setErrorPayment] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -32,10 +35,65 @@ export default function MyBilling() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.customer_id]);
 
+  const handlePayNow = async () => {
+    try {
+      const res = await createPayment(selectedInvoice.invoice_id);
+
+      window.location.href = res.payUrl;
+    } catch (err) {
+      console.error(err); 
+    }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    const orderId = params.get("orderId");
+    const resultCode = params.get("resultCode");
+
+    if (resultCode === "0") {
+        setSuccessPayment("Thanh toán thành công");
+        setErrorPayment(null);
+      } else if (resultCode === "1006") {
+        setErrorPayment("Bạn đã hủy thanh toán");
+        setSuccessPayment(null);
+      } else {
+        setErrorPayment("Thanh toán thất bại");
+        setSuccessPayment(null);
+      }
+
+    if (orderId && resultCode) {
+      fetch("http://localhost:3003/billing/ipn", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          orderId,
+          resultCode: Number(resultCode)
+        })
+      }).then(() => {
+        window.history.replaceState({}, "", "/customers/mybilling");
+        getInvoices(customer.customer_id);
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer?.customer_id]);
+
   return (
     <>
       <div className="table-container">
         <h2>💡 Danh sách hóa đơn</h2>
+        {successPayment && (
+          <div className="success">
+            {successPayment}
+          </div>
+        )}
+        {errorPayment && (
+          <div className="error">
+            {errorPayment}
+          </div>
+        )}
 
         <table className="invoice-table">
           <thead>
@@ -164,14 +222,26 @@ export default function MyBilling() {
               </div>
             </div>
 
-            {selectedInvoice.invoice_status === "UNPAID" && (
-              <div className="modal-footer">
-                <button className="btn-success">
+            <div className="modal-footer">
+              {selectedInvoice.invoice_status === "UNPAID" && (
+                <button className="btn-success" onClick={handlePayNow}>
                   Pay Now
                 </button>
+              )}
+
+            </div>
+
+            {error && (
+              <div className="error">
+                {error}
               </div>
             )}
 
+            {success && (
+              <div className="error">
+                {success}
+              </div>
+            )}
           </div>
         </div>
       )}
