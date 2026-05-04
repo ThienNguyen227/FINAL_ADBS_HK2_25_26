@@ -286,18 +286,100 @@ exports.recordUsage = async (req, res) => {
     // ==========================================
     // TỰ ĐỘNG KÍCH HOẠT LỚP 2 (BATCH JOB) KHI HẾT NGÀY (96/96)
     // ==========================================
-    if (result.reading_count >= 96) {
-      console.log(`[Batch Job - AUTO] Đồng hồ ${meter_id} đã đủ 96 chỉ số. Kích hoạt tính toán lại Baseline và Tổng hợp tháng...`);
-      const { calculateMeterBaselines, aggregateMonthlyUsage } = require("../utils/aggregationWorker");
+    // if (result.reading_count >= 96) {
+    //   console.log(`[Batch Job - AUTO] Đồng hồ ${meter_id} đã đủ 96 chỉ số. Kích hoạt tính toán lại Baseline và Tổng hợp tháng...`);
+    //   const { calculateMeterBaselines, aggregateMonthlyUsage } = require("../utils/aggregationWorker");
       
-      // Chạy cả 2 tác vụ bất đồng bộ
+    //   // Chạy cả 2 tác vụ bất đồng bộ
+    //   Promise.all([
+    //     calculateMeterBaselines(),
+    //     aggregateMonthlyUsage()
+    //   ]).then(() => {
+    //     console.log("[Batch Job - AUTO] Đã hoàn thành cập nhật Baseline và Monthly Summary.");
+    //   }).catch(err => {
+    //     console.error("[Batch Job - AUTO] Lỗi khi chạy tác vụ tự động:", err);
+    //   });
+    // }
+    if (result.reading_count >= 96) {
+      console.log(`[Batch Job - AUTO] Đồng hồ ${meter_id} đã đủ 96 chỉ số...`);
+
+      const { calculateMeterBaselines, aggregateMonthlyUsage } =
+        require("../utils/aggregationWorker");
+
       Promise.all([
         calculateMeterBaselines(),
         aggregateMonthlyUsage()
-      ]).then(() => {
-        console.log("[Batch Job - AUTO] Đã hoàn thành cập nhật Baseline và Monthly Summary.");
+      ]).then(async () => {
+
+        console.log("[Batch Job] Aggregation done → CALL MONTHLY API");
+
+        try {
+          // ==========================================
+          // 1. LẤY DATA QUA API (đúng kiến trúc bạn đã build)
+          // ==========================================
+          const monthStr = startOfDay.toISOString().slice(0, 7);
+
+          const usageRes = await fetch(
+            `http://localhost:3004/api/usage/monthly-summary?meter_id=${meter_id}&month=${monthStr}`
+          );
+
+          const usageJson = await usageRes.json();
+
+          if (!usageJson.success || !usageJson.data?.length) {
+            console.log("No monthly data found");
+            return;
+          }
+
+          const monthlyData = usageJson.data[0];
+
+          // Lấy customer_id và contract_id
+          const userId = Number(meter_id.split("_")[1]); // 33
+          const customerRes = await fetch(
+            `http://localhost:3001/customer/customer-contract-id?user_id=${userId}`
+          );
+          const customerJson = await customerRes.json();
+
+          if (!customerJson.customer_id || !customerJson.contract_id) {
+            throw new Error("Cannot get customer-contract info");
+          }
+
+          const customer_id = customerJson.customer_id;
+          const contract_id = customerJson.contract_id;
+          const contract_rate = customerJson.contract_rate;
+          // ==========================================
+          // 2. CALL BILLING SERVICE
+          // ==========================================
+
+          const billingRes = await fetch("http://localhost:3003/billing/generates", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              invoice_month: monthlyData.month + "-01",
+              invoice_total_usage: monthlyData.total_monthly_usage,
+              invoice_rate: contract_rate,
+              invoice_customer_id: customer_id,
+              invoice_contract_id: contract_id
+            })
+          });
+
+          const billingData = await billingRes.json();
+
+          console.log("🔥 BILLING RESPONSE:", billingData);
+
+          if (!billingRes.ok) {
+            console.error("❌ Billing FAILED:", billingData);
+          } else {
+            console.log("✅ Billing SUCCESS:", billingData);
+          }
+
+        } catch (err) {
+          console.error("[Billing ERROR]", err);
+        }
+
       }).catch(err => {
-        console.error("[Batch Job - AUTO] Lỗi khi chạy tác vụ tự động:", err);
+        console.error("[Batch Job ERROR]", err);
       });
     }
 
