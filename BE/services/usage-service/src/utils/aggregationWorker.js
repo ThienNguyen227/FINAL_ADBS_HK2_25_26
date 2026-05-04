@@ -57,17 +57,88 @@ async function aggregateMonthlyUsage() {
   }
 }
 
+// ==========================================
+// LỚP 2: Luồng Batch Job & Macro Anomaly (Luồng Ban Đêm)
+// ==========================================
+async function calculateMeterBaselines() {
+  try {
+    console.log("[Cron] Bắt đầu tính toán Baseline (mu, sigma) cho các đồng hồ...");
+    
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const pipeline = [
+      {
+        $match: { day: { $gte: thirtyDaysAgo } }
+      },
+      {
+        // Tách các giá trị tiêu thụ chi tiết để tính độ lệch chuẩn chính xác
+        $unwind: "$readings"
+      },
+      {
+        $group: {
+          _id: "$meter_id",
+          mu: { $avg: "$readings.usage" },
+          sigma: { $stdDevPop: "$readings.usage" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          meter_id: "$_id",
+          mu: { $round: ["$mu", 4] },
+          // Đảm bảo sigma không bằng 0 để tránh lỗi chia cho 0 khi tính Z-Score
+          sigma: { $cond: [{ $eq: ["$sigma", 0] }, 0.01, { $round: ["$sigma", 4] }] },
+          last_updated: "$$NOW"
+        }
+      },
+      {
+        // Kỹ thuật Materialized View: Lưu đè vào bảng meterbaselines
+        $merge: {
+          into: "meterbaselines",
+          on: "meter_id",
+          whenMatched: "replace",
+          whenNotMatched: "insert"
+        }
+      }
+    ];
+
+    await UsageReading.aggregate(pipeline);
+
+    // Nạp dữ liệu từ MongoDB vào In-Memory Cache (thay thế cho việc đẩy vào Redis)
+    const MeterBaseline = require("../models/MeterBaseline");
+    const { baselineCache } = require("./memoryCache");
+    
+    const baselines = await MeterBaseline.find({});
+    baselineCache.clear();
+    baselines.forEach(b => {
+      baselineCache.set(b.meter_id, { mu: b.mu, sigma: b.sigma });
+    });
+
+    console.log(`[Cron] Đã tính toán xong và Cache thành công Baseline cho ${baselines.length} đồng hồ.`);
+  } catch (err) {
+    console.error("[Cron] Lỗi khi tính toán Baseline:", err.message);
+  }
+}
+
 // Thiết lập Cron Job: Chạy vào lúc 00:05 mỗi đêm
 function startCronJobs() {
   // Chạy 1 lần ngay khi khởi động server để đảm bảo dữ liệu luôn mới nhất
   aggregateMonthlyUsage();
+  calculateMeterBaselines();
 
-  // Schedule chạy định kỳ
+  // Schedule chạy định kỳ (Monthly Summary) lúc 00:05
   cron.schedule("5 0 * * *", () => {
     aggregateMonthlyUsage();
   });
+
+  // Schedule chạy tính toán Baseline lúc 02:00 sáng (Theo đúng yêu cầu Layer 2)
+  cron.schedule("0 2 * * *", () => {
+    calculateMeterBaselines();
+  });
   
-  console.log("[Cron] Hệ thống Background Jobs đã được kích hoạt (00:05 hàng đêm).");
+  console.log("[Cron] Hệ thống Background Jobs đã được kích hoạt.");
 }
 
-module.exports = { startCronJobs, aggregateMonthlyUsage };
+
+module.exports = { startCronJobs, aggregateMonthlyUsage, calculateMeterBaselines };

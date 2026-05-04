@@ -15,6 +15,7 @@ import {
   Button,
   Card,
   CardContent,
+  Slider
 } from "@mui/material";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 
@@ -22,15 +23,31 @@ export default function AnomalyDetection() {
   const [anomalies, setAnomalies] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [timeIndex, setTimeIndex] = useState(null); // null để tự động lấy mốc mới nhất
 
-  const fetchAnomalies = async () => {
+  // Hàm biến đổi index (0-95) thành chuỗi thời gian (HH:mm)
+  const formatTimeLabel = (value) => {
+    if (value === null) return "Đang tải...";
+    const totalMinutes = value * 15;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+
+  const fetchAnomalies = async (isRefresh = false) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("http://localhost:3004/api/usage/anomalies?threshold=150");
+      // Nếu là Refresh hoặc mới load, gửi -1 để lấy mốc mới nhất
+      const queryInterval = (isRefresh || timeIndex === null) ? -1 : timeIndex;
+      const res = await fetch(`http://localhost:3004/api/usage/anomalies?interval=${queryInterval}`);
       const data = await res.json();
       if (data.success) {
         setAnomalies(data.data);
+        // Tự động nhảy thanh trượt về mốc mới nhất nếu Backend trả về
+        if (queryInterval === -1) {
+          setTimeIndex(data.latest_interval);
+        }
       } else {
         setError(data.message || "Lấy dữ liệu bất thường thất bại");
       }
@@ -41,51 +58,90 @@ export default function AnomalyDetection() {
     }
   };
 
+  // Load lần đầu
   useEffect(() => {
     fetchAnomalies();
   }, []);
 
-  const getSeverityColor = (ratio) => {
-    if (ratio >= 300) return "error";
-    if (ratio >= 200) return "warning";
+  // Load khi kéo thanh trượt
+  useEffect(() => {
+    if (timeIndex !== null) {
+      fetchAnomalies();
+    }
+  }, [timeIndex]);
+
+  const getSeverityColor = (zScore) => {
+    const z = Math.abs(zScore);
+    if (z >= 5) return "error";    // Bất thường cực nghiêm trọng
+    if (z >= 3) return "warning";  // Bất thường
     return "info";
   };
 
-  // Trực quan hoá biểu đồ thời gian thực cho đồng hồ bất thường nghiêm trọng nhất
+  // Trực quan hoá biểu đồ cho đồng hồ bất thường nhất tại thời điểm đó
   const topAnomaly = anomalies.length > 0 ? anomalies[0] : null;
-  const anomalyChartData = topAnomaly && topAnomaly.readings ? topAnomaly.readings.map(r => ({
+  const anomalyChartData = topAnomaly && topAnomaly.readings ? topAnomaly.readings.map((r, idx) => ({
     time: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    usage: r.usage
+    usage: r.usage,
+    isCurrent: idx === timeIndex // Đánh dấu điểm đang xem trên biểu đồ
   })) : [];
 
   return (
     <Box sx={{ p: 3, maxWidth: 1200, margin: '0 auto' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h4" fontWeight="bold" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           ⚠️ Phát hiện tiêu thụ điện bất thường
         </Typography>
         <Button
           variant="contained"
           color="primary"
-          onClick={fetchAnomalies}
+          onClick={() => fetchAnomalies(true)}
           disabled={loading}
         >
-          Làm mới dữ liệu
+          Làm mới
         </Button>
       </Box>
 
-      {/* BIỂU ĐỒ THEO DÕI THỜI GIAN THỰC */}
+      {/* THANH TRƯỢT THỜI GIAN (TIME TRAVEL SLIDER) */}
+      <Card sx={{ mb: 4, p: 3, bgcolor: '#fff5f5', border: '1px solid #feb2b2' }}>
+        <Typography variant="h6" gutterBottom color="error.dark" fontWeight="bold">
+          🕒 Xem lại lịch sử lỗi: {formatTimeLabel(timeIndex)}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" mb={2}>
+          Kéo thanh trượt để truy vấn danh sách các hộ bị hệ thống cảnh báo tại mốc thời gian trong quá khứ.
+        </Typography>
+        <Slider
+          value={timeIndex || 0}
+          onChange={(e, newValue) => setTimeIndex(newValue)}
+          min={0}
+          max={95}
+          step={1}
+          marks={[
+            { value: 0, label: '00:00' },
+            { value: 24, label: '06:00' },
+            { value: 48, label: '12:00' },
+            { value: 72, label: '18:00' },
+            { value: 95, label: '23:45' },
+          ]}
+          valueLabelDisplay="auto"
+          valueLabelFormat={formatTimeLabel}
+          color="error"
+          sx={{ mt: 2 }}
+        />
+      </Card>
+
+      {/* BIỂU ĐỒ THEO DÕI */}
       {anomalyChartData.length > 0 && (
         <Card sx={{ mb: 4, border: '1px solid #ffcccc' }}>
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
               <Typography variant="h6" color="error.main" gutterBottom fontWeight="bold">
-                Bảng theo dõi bất thường theo thời gian thực (Đồng hồ: {topAnomaly.meter_id})
+                Phân tích biến động: {topAnomaly.meter_id} (Z-Score: {topAnomaly.z_score})
               </Typography>
-              <Chip label="NGUY HIỂM" color="error" />
+              <Chip label={Math.abs(topAnomaly.z_score) >= 5 ? "RẤT NGUY HIỂM" : "BẤT THƯỜNG"} color="error" />
             </Box>
             <Typography variant="body2" color="text.secondary" mb={2}>
-              Biểu đồ đường thời gian thực theo dõi mức tiêu thụ mỗi 15 phút. Hệ thống tự động kích hoạt mức cảnh báo đỏ khi phát hiện dữ liệu vượt ngưỡng đột biến.
+              Dữ liệu tại mốc {formatTimeLabel(timeIndex)}: {topAnomaly.current_usage?.toFixed(2)} kWh. 
+              Trung bình lịch sử (μ) = {topAnomaly.mu}.
             </Typography>
             <Box sx={{ height: 300, width: '100%' }}>
               <ResponsiveContainer>
@@ -94,14 +150,19 @@ export default function AnomalyDetection() {
                   <XAxis dataKey="time" />
                   <YAxis />
                   <Tooltip formatter={(value) => [`${value} kWh`, 'Tiêu thụ']} />
-                  <ReferenceLine y={2.0} label="Ngưỡng Cảnh Báo" stroke="red" strokeDasharray="3 3" />
+                  <ReferenceLine y={topAnomaly.mu} label="Trung bình (μ)" stroke="#4caf50" strokeDasharray="3 3" />
                   <Line
                     type="monotone"
                     dataKey="usage"
                     stroke="#ef4444"
                     strokeWidth={3}
-                    dot={{ r: 5, fill: '#ef4444' }}
-                    activeDot={{ r: 8 }}
+                    dot={(props) => {
+                      const { cx, cy, payload } = props;
+                      if (payload.isCurrent) {
+                        return <circle cx={cx} cy={cy} r={8} fill="#ef4444" stroke="white" strokeWidth={2} />;
+                      }
+                      return <circle cx={cx} cy={cy} r={4} fill="#ef4444" />;
+                    }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -117,40 +178,46 @@ export default function AnomalyDetection() {
       ) : error ? (
         <Alert severity="error">❌ {error}</Alert>
       ) : anomalies.length === 0 ? (
-        <Alert severity="success">Không phát hiện dấu hiệu bất thường nào. Tất cả các khu vực lưới điện đang hoạt động bình thường.</Alert>
+        <Alert severity="success">Tại mốc {formatTimeLabel(timeIndex)}, không phát hiện dấu hiệu bất thường nào.</Alert>
       ) : (
         <TableContainer component={Paper} elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
           <Table sx={{ minWidth: 650 }}>
             <TableHead sx={{ bgcolor: 'primary.main' }}>
               <TableRow>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Mã đồng hồ</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Khu vực</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">TB khu vực</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Tổng tiêu thụ</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Tỷ lệ bất thường</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Trạng thái</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Trung bình (μ)</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Độ lệch (σ)</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Tiêu thụ ({formatTimeLabel(timeIndex)})</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Chỉ số Z-Score</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Đánh giá</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {anomalies.map((row, index) => {
-                const isCritical = row.usage_ratio_percent >= 300;
+                const z = Math.abs(row.z_score);
+                const isCritical = z >= 5;
                 return (
                   <TableRow key={index} sx={{ bgcolor: isCritical ? '#fff5f5' : 'inherit' }}>
                     <TableCell component="th" scope="row"><strong>{row.meter_id}</strong></TableCell>
-                    <TableCell>{row.neighborhood_id}</TableCell>
-                    <TableCell align="right">{row.avg_neighborhood_usage} kWh</TableCell>
+                    <TableCell>{row.mu?.toFixed(2)} kWh</TableCell>
+                    <TableCell align="right">{row.sigma?.toFixed(3)}</TableCell>
                     <TableCell align="right">
                       <Typography fontWeight="bold" color={isCritical ? "error.main" : "text.primary"}>
-                        {row.total_usage} kWh
+                        {row.current_usage?.toFixed(3)} kWh
                       </Typography>
                     </TableCell>
                     <TableCell align="center">
                       <Typography fontWeight="bold" color={isCritical ? "error.main" : "warning.main"}>
-                        {row.usage_ratio_percent}%
+                        {row.z_score}
                       </Typography>
                     </TableCell>
                     <TableCell align="center">
-                      <Chip label={isCritical ? "NGUY HIỂM" : "NGHI VẤN"} color={getSeverityColor(row.usage_ratio_percent)} size="small" sx={{ fontWeight: 'bold' }} />
+                      <Chip 
+                        label={z >= 5 ? "NGUY HIỂM" : "BẤT THƯỜNG"} 
+                        color={getSeverityColor(row.z_score)} 
+                        size="small" 
+                        sx={{ fontWeight: 'bold' }} 
+                      />
                     </TableCell>
                   </TableRow>
                 );

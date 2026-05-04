@@ -24,9 +24,11 @@ export default function MyUsage() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-    const [neighborhoodId, setNeighborhoodId] = useState(null);
-   const [unitPrice, setUnitPrice] = useState(1500);
-   const [simulationDate, setSimulationDate] = useState(new Date().toISOString().split('T')[0]); // Mặc định là hôm nay
+  const [neighborhoodId, setNeighborhoodId] = useState(null);
+  const [unitPrice, setUnitPrice] = useState(1500);
+  const [simulationDate, setSimulationDate] = useState(new Date().toISOString().split('T')[0]); // Mặc định là hôm nay
+  const [simulationMode, setSimulationMode] = useState(1); // 1: Bình thường, 2: Lỗi cá nhân, 3: Lỗi khu vực
+
 
 
 
@@ -86,23 +88,23 @@ export default function MyUsage() {
 
     // Tính toán thời gian giả lập dựa trên simulationDate
     // Nếu là ngày hôm nay, lấy giờ hiện tại. Nếu là ngày khác, giả lập giờ ngẫu nhiên.
-    const isToday = simulationDate === new Date().toISOString().split('T')[0];
+    // Logic mới: Bắt đầu từ 00:00 và tăng 15 phút cho mỗi lần bấm (dựa trên currentCount)
     const targetTimestamp = new Date(simulationDate);
-    if (isToday) {
-      const now = new Date();
-      targetTimestamp.setHours(now.getHours(), now.getMinutes());
-    } else {
-      targetTimestamp.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60));
-    }
+    targetTimestamp.setHours(0, 0, 0, 0); // Reset về 00:00
+
+    // Cộng thêm (currentCount * 15) phút
+    const totalMinutesToAdd = currentCount * 15;
+    const hoursToAdd = Math.floor(totalMinutesToAdd / 60);
+    const minutesToAdd = totalMinutesToAdd % 60;
+
+    targetTimestamp.setHours(hoursToAdd, minutesToAdd);
+
 
 
     try {
-      // 10% cơ hội sinh ra dữ liệu bất thường (từ 5.0 đến 8.0 kWh) để test trang Anomaly
-      // 90% cơ hội là tiêu thụ bình thường (từ 0.5 đến 1.5 kWh)
-      const isAnomaly = Math.random() < 0.1;
-      const randomUsage = isAnomaly
-        ? (Math.random() * (8.0 - 5.0) + 5.0).toFixed(2)
-        : (Math.random() * (1.5 - 0.5) + 0.5).toFixed(2);
+      // Xác định usage ban đầu cho đồng hồ gốc (Sẽ được xử lý lại tại Backend dựa trên Mode)
+      // Mặc định cứ gửi giá trị bình thường, BE sẽ quyết định ghi đè nếu mode = 2 hoặc 3
+      const baseUsage = (Math.random() * (1.5 - 0.5) + 0.5).toFixed(2);
 
       await fetch("http://localhost:3004/api/usage/record", {
         method: "POST",
@@ -110,10 +112,11 @@ export default function MyUsage() {
         body: JSON.stringify({
           meter_id: userMeterId,
           neighborhood_id: neighborhoodId,
-          usage: randomUsage,
+          usage: baseUsage,
           timestamp: targetTimestamp.toISOString(), // Sử dụng ngày người dùng đã chọn
           longitude: 106.7009 + (Math.random() - 0.5) * 0.03,
-          latitude: 10.7769 + (Math.random() - 0.5) * 0.03
+          latitude: 10.7769 + (Math.random() - 0.5) * 0.03,
+          simulation_mode: simulationMode // Gửi chế độ giả lập xuống Backend
         })
       });
       fetchHistory();
@@ -154,13 +157,24 @@ export default function MyUsage() {
             type="date"
             value={simulationDate}
             onChange={(e) => setSimulationDate(e.target.value)}
-            style={{ 
-              padding: '8px', 
-              borderRadius: '4px', 
+            style={{
+              padding: '8px',
+              borderRadius: '4px',
               border: '1px solid #ccc',
-              fontFamily: 'inherit' 
+              fontFamily: 'inherit'
             }}
           />
+          <select
+            value={simulationMode}
+            onChange={(e) => setSimulationMode(Number(e.target.value))}
+            style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+          >
+            <option value={1}>🟢 Chế độ 1: Bình thường</option>
+            <option value={2}>🟠 Chế độ 2: Lỗi vi mô (Cá nhân - Dưới 5 hộ)</option>
+            <option value={3}>🔴 Chế độ 3: Lỗi vĩ mô (Cúp điện trạm - Trên 5 hộ)</option>
+            <option value={4}>⚫ Chế độ 4: Mất điện cá nhân (Tiêu thụ = 0)</option>
+            <option value={5}>🚫 Chế độ 5: Mất điện toàn khu (Tất cả = 0)</option>
+          </select>
           <Button
             variant="contained"
             color="secondary"
@@ -168,7 +182,7 @@ export default function MyUsage() {
             disabled={!neighborhoodId}
             sx={{ fontWeight: 'bold' }}
           >
-            {isMaxedOut && isToday ? "✅ Đã đạt tối đa hôm nay" : "⏱️ Giả lập đo lường 15p"}
+            {isMaxedOut && isToday ? "✅ Đã đạt tối đa hôm nay" : "Giả lập"}
           </Button>
         </Box>
 
@@ -188,9 +202,7 @@ export default function MyUsage() {
             <Typography variant="h6" color="primary.dark" gutterBottom>
               Biểu đồ tiêu thụ ngày hôm nay
             </Typography>
-            <Typography variant="body2" color="text.secondary" mb={3}>
-              Biểu đồ trực quan hóa mảng `readings` (mỗi 15 phút) được trích xuất từ 1 Document (Bucket Pattern).
-            </Typography>
+
             <Box sx={{ height: 300, width: '100%' }}>
               <ResponsiveContainer>
                 <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -243,8 +255,8 @@ export default function MyUsage() {
                       {doc.reading_count} / 96 (Chu kỳ)
                     </TableCell>
                     <TableCell align="right">
-                      <Typography 
-                        fontWeight="bold" 
+                      <Typography
+                        fontWeight="bold"
                         color={estimatedCost > 50000 ? "error.main" : "primary.main"}
                       >
                         {estimatedCost.toLocaleString()} VNĐ
