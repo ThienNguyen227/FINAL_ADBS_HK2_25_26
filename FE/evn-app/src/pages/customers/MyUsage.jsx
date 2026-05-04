@@ -79,17 +79,18 @@ export default function MyUsage() {
     }
   };
 
-  const todayBucket = history.length > 0 ? history[0] : null;
-  const currentCount = todayBucket ? todayBucket.reading_count : 0;
+  // Tìm dữ liệu của ngày đang chọn trong danh sách lịch sử (So sánh theo local date)
+  const selectedDayBucket = history.find(h => {
+    const d = new Date(h.day);
+    const bucketDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return bucketDate === simulationDate;
+  });
 
-  // Kiểm tra xem ngày đang chọn có phải là hôm nay không
-  const isToday = simulationDate === new Date().toISOString().split('T')[0];
-
-  // Kiểm tra xem đã đạt giới hạn 96 lần đo (24h) chưa
+  const currentCount = selectedDayBucket ? selectedDayBucket.reading_count : 0;
   const isMaxedOut = currentCount >= 96;
 
   const handleSimulateReading = async () => {
-    if (!userMeterId || !neighborhoodId) return;
+    if (!userMeterId || !neighborhoodId || isMaxedOut) return;
 
     // Tính toán thời gian giả lập dựa trên simulationDate
     // Nếu là ngày hôm nay, lấy giờ hiện tại. Nếu là ngày khác, giả lập giờ ngẫu nhiên.
@@ -136,8 +137,8 @@ export default function MyUsage() {
     }
   }, [userMeterId]);
 
-  // Format data cho biểu đồ đường
-  const chartData = history.length > 0 && history[0].readings ? history[0].readings.map(r => ({
+  // Format data cho biểu đồ dựa trên ngày đang chọn (selectedDayBucket)
+  const chartData = selectedDayBucket && selectedDayBucket.readings ? selectedDayBucket.readings.map(r => ({
     time: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     usage: r.usage
   })) : [];
@@ -205,7 +206,7 @@ export default function MyUsage() {
         <Card sx={{ mb: 4, elevation: 3 }}>
           <CardContent>
             <Typography variant="h6" color="primary.dark" gutterBottom>
-              Biểu đồ tiêu thụ ngày hôm nay
+              Biểu đồ tiêu thụ theo ngày
             </Typography>
 
             <Box sx={{ height: 300, width: '100%' }}>
