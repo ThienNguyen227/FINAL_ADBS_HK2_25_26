@@ -23,12 +23,14 @@ export default function AnomalyDetection() {
   const [anomalies, setAnomalies] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [timeIndex, setTimeIndex] = useState(null); // null để tự động lấy mốc mới nhất
+  const [timeIndex, setTimeIndex] = useState(null); 
+  const [targetDate, setTargetDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Hàm biến đổi index (0-95) thành chuỗi thời gian (HH:mm)
   const formatTimeLabel = (value) => {
     if (value === null) return "Đang tải...";
-    const totalMinutes = value * 15;
+    const safeValue = value % 96;
+    const totalMinutes = safeValue * 15;
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
@@ -38,13 +40,11 @@ export default function AnomalyDetection() {
     setLoading(true);
     setError(null);
     try {
-      // Nếu là Refresh hoặc mới load, gửi -1 để lấy mốc mới nhất
       const queryInterval = (isRefresh || timeIndex === null) ? -1 : timeIndex;
-      const res = await fetch(`http://localhost:3004/api/usage/anomalies?interval=${queryInterval}`);
+      const res = await fetch(`http://localhost:3004/api/usage/anomalies?date=${targetDate}&interval=${queryInterval}`);
       const data = await res.json();
       if (data.success) {
         setAnomalies(data.data);
-        // Tự động nhảy thanh trượt về mốc mới nhất nếu Backend trả về
         if (queryInterval === -1) {
           setTimeIndex(data.latest_interval);
         }
@@ -58,12 +58,10 @@ export default function AnomalyDetection() {
     }
   };
 
-  // Load lần đầu
   useEffect(() => {
     fetchAnomalies();
-  }, []);
+  }, [targetDate]); // Load lại khi đổi ngày
 
-  // Load khi kéo thanh trượt
   useEffect(() => {
     if (timeIndex !== null) {
       fetchAnomalies();
@@ -91,14 +89,27 @@ export default function AnomalyDetection() {
         <Typography variant="h4" fontWeight="bold" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           ⚠️ Phát hiện tiêu thụ điện bất thường
         </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={() => fetchAnomalies(true)}
-          disabled={loading}
-        >
-          Làm mới
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <input
+            type="date"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            style={{
+              padding: '8px',
+              borderRadius: '4px',
+              border: '1px solid #ccc',
+              fontFamily: 'inherit'
+            }}
+          />
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => fetchAnomalies(true)}
+            disabled={loading}
+          >
+            Làm mới
+          </Button>
+        </Box>
       </Box>
 
       {/* THANH TRƯỢT THỜI GIAN (TIME TRAVEL SLIDER) */}
