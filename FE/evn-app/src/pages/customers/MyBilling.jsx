@@ -18,6 +18,7 @@ export default function MyBilling() {
 
   const [successPayment, setSuccessPayment] = useState(null);
   const [errorPayment, setErrorPayment] = useState(null);
+  const [showPaymentOptions, setShowPaymentOptions] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -35,48 +36,63 @@ export default function MyBilling() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.customer_id]);
 
-  const handlePayNow = async () => {
+  // const handlePayNow = async () => {
+  //   try {
+  //     const res = await createPayment(selectedInvoice.invoice_id);
+
+  //     window.location.href = res.payUrl;
+  //   } catch (err) {
+  //     console.error(err); 
+  //   }
+  // };
+
+  const handlePayNow = async (method) => {
     try {
-      const res = await createPayment(selectedInvoice.invoice_id);
+      const res = await createPayment(
+        selectedInvoice.invoice_id,
+        method
+      );
 
       window.location.href = res.payUrl;
     } catch (err) {
-      console.error(err); 
+      console.error(err);
     }
   };
 
+  const token = sessionStorage.getItem("token");
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const orderId = params.get("orderId") || params.get("vnp_TxnRef");
+    const resultCode = params.get("resultCode") || params.get("vnp_ResponseCode");
 
-    const orderId = params.get("orderId");
-    const resultCode = params.get("resultCode");
+    if (!orderId || !resultCode) return;
 
-    if (resultCode === "0") {
-        setSuccessPayment("Thanh toán thành công");
-        setErrorPayment(null);
-      } else if (resultCode === "1006") {
-        setErrorPayment("Bạn đã hủy thanh toán");
-        setSuccessPayment(null);
-      } else {
-        setErrorPayment("Thanh toán thất bại");
-        setSuccessPayment(null);
-      }
-
-    if (orderId && resultCode) {
-      fetch("http://localhost:3003/billing/ipn", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          orderId,
-          resultCode: Number(resultCode)
-        })
-      }).then(() => {
-        window.history.replaceState({}, "", "/customers/mybilling");
-        getInvoices(customer.customer_id);
-      });
+    if (resultCode === "0" || resultCode === "00") {
+      setSuccessPayment("Thanh toán thành công!");
+      setErrorPayment(null);
+    } else if (resultCode === "1006" || resultCode === "24") {
+      setErrorPayment("Bạn đã hủy thanh toán!");
+      setSuccessPayment(null);
+    } else {
+      setErrorPayment("Thanh toán thất bại!");
+      setSuccessPayment(null);
     }
+
+    fetch("http://localhost:3003/billing/ipn", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        orderId,
+        resultCode: Number(resultCode)
+      })
+    }).then(() => {
+      window.history.replaceState({}, "", "/customers/mybilling");
+      getInvoices(customer.customer_id);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.customer_id]);
 
@@ -222,13 +238,43 @@ export default function MyBilling() {
               </div>
             </div>
 
-            <div className="modal-footer">
+            {/* <div className="modal-footer">
               {selectedInvoice.invoice_status === "UNPAID" && (
                 <button className="btn-success" onClick={handlePayNow}>
                   Pay Now
                 </button>
               )}
 
+            </div> */}
+            <div className="modal-footer">
+              {selectedInvoice.invoice_status === "UNPAID" && (
+                <div className="payment-dropdown">
+                  <button
+                    className="btn-success"
+                    onClick={() => setShowPaymentOptions(!showPaymentOptions)}
+                  >
+                    Pay Now ▼
+                  </button>
+
+                  {showPaymentOptions && (
+                    <div className="payment-options">
+                      <button
+                        className="payment-option"
+                        onClick={() => handlePayNow("momo")}
+                      >
+                        MoMo
+                      </button>
+
+                      <button
+                        className="payment-option"
+                        onClick={() => handlePayNow("vnpay")}
+                      >
+                        VNPay
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {error && (

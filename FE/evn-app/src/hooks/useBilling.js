@@ -27,12 +27,12 @@ export const useBilling = () => {
         }
     };
 
-    const createPayment = async (invoice_id) => {
+    const createPayment = async (invoice_id, method) => {
         try {
             setLoading(true);
             setError(null);
 
-            const res = await createPaymentAPI(invoice_id);
+            const res = await createPaymentAPI(invoice_id, method);
 
             return res.data;
 
