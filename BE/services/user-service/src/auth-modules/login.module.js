@@ -112,9 +112,6 @@ const upsertSession = async ({ userId, refreshToken, device, ip }) => {
       SELECT @@ROWCOUNT AS affected;
     `);
 
-    // TEST LOCK (giữ để debug race condition)
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
     if (result.recordset[0].affected === 0) {
       await transaction.request()
         .input("userId", userId)
@@ -192,7 +189,7 @@ const loginService = async (phone, password) => {
   const accessToken = jwt.sign(
     { userId: user.user_id },
     process.env.JWT_ACCESS_SECRET,
-    { expiresIn: "30m" }
+    { expiresIn: "2h" }
   );
 
   const refreshToken = jwt.sign(

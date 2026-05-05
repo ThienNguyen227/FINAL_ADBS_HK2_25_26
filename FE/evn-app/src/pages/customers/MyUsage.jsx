@@ -73,7 +73,7 @@ export default function MyUsage() {
       } else {
         setError("Lấy dữ liệu lịch sử thất bại");
       }
-    } catch (err) {
+    } catch {
       setError("Lỗi mạng. Vui lòng kiểm tra lại kết nối.");
     } finally {
       setLoading(false);
@@ -113,6 +113,13 @@ export default function MyUsage() {
   const currentCount = selectedDayBucket ? selectedDayBucket.reading_count : 0;
   const isMaxedOut = currentCount >= 96;
 
+  // dùng local date thay vì toISOString()
+  const today = new Date();
+  const localToday =
+    `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  const isToday = simulationDate === localToday;
+
   const handleSimulateReading = async () => {
     if (!userMeterId || !neighborhoodId || isMaxedOut) return;
 
@@ -130,6 +137,14 @@ export default function MyUsage() {
     targetTimestamp.setHours(hoursToAdd, minutesToAdd);
 
 
+    const slot = currentCount;
+
+    targetTimestamp.setHours(
+      Math.floor(slot / 4),
+      (slot % 4) * 15,
+      0,
+      0
+    );
 
     try {
       // Xác định usage ban đầu cho đồng hồ gốc (Sẽ được xử lý lại tại Backend dựa trên Mode)
@@ -149,9 +164,10 @@ export default function MyUsage() {
           simulation_mode: simulationMode // Gửi chế độ giả lập xuống Backend
         })
       });
+
       fetchHistory();
     } catch (err) {
-      console.error("Giả lập đo lường thất bại", err);
+      console.error(err);
     }
   };
 

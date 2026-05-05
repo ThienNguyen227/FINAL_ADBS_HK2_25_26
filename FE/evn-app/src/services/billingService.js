@@ -12,3 +12,17 @@ export const getInvoicesAPI = async (customer_id) => {
     }
   });
 };
+
+export const createPaymentAPI = async (invoice_id, method) => {
+  const token = sessionStorage.getItem("token");
+
+  return axios.post(
+    `${API_URL}/payments`,
+    { invoice_id, method },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  );
+};
