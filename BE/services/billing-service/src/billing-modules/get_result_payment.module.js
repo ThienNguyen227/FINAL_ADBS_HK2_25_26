@@ -1,32 +1,64 @@
 const express = require("express");
 const router = express.Router();
-const { connectDB } = require("../config/db");
+const { sql, connectDB } = require("../config/db");
+const jwt = require("jsonwebtoken");
 
-router.post("/", async (req, res) => {
-  console.log("IPN CALLED");
-  console.log(req.body);
-  const { orderId, resultCode } = req.body;
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).json({
+      message: "No token provided"
+    });
+  }
+
+  const token = authHeader.split(" ")[1];
 
   try {
-    const pool = await connectDB();
+    const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({
+      message: "Invalid or expired token"
+    });
+  }
+};
 
-    // 1. update payment trước
-    const paymentResult = await pool.request()
+router.post("/", verifyToken, async (req, res) => {
+  console.log("IPN CALLED");
+  console.log(req.body);
+
+  const { orderId, resultCode } = req.body;
+
+  const pool = await connectDB();
+  const tx = new sql.Transaction(pool);
+
+  let transactionStarted = false;
+
+  try {
+    await tx.begin(sql.ISOLATION_LEVEL.READ_COMMITTED);
+    transactionStarted = true;
+
+    // 1. lock payment row
+    const paymentResult = await new sql.Request(tx)
       .input("orderId", orderId)
       .query(`
         SELECT payment_invoice_id
-        FROM Payments
+        FROM Payments WITH (UPDLOCK, HOLDLOCK)
         WHERE payment_transaction_id = @orderId
       `);
 
     if (!paymentResult.recordset.length) {
+      await tx.rollback();
       return res.status(404).json({ message: "Payment not found" });
     }
 
     const invoiceId = paymentResult.recordset[0].payment_invoice_id;
 
     if (resultCode === 0) {
-      await pool.request()
+      // SUCCESS PAYMENT
+      await new sql.Request(tx)
         .input("orderId", orderId)
         .query(`
           UPDATE Payments
@@ -35,7 +67,7 @@ router.post("/", async (req, res) => {
           WHERE payment_transaction_id = @orderId
         `);
 
-      await pool.request()
+      await new sql.Request(tx)
         .input("invoiceId", invoiceId)
         .query(`
           UPDATE Invoices
@@ -44,7 +76,8 @@ router.post("/", async (req, res) => {
         `);
 
     } else {
-      await pool.request()
+      // FAILED PAYMENT
+      await new sql.Request(tx)
         .input("orderId", orderId)
         .query(`
           UPDATE Payments
@@ -54,10 +87,17 @@ router.post("/", async (req, res) => {
         `);
     }
 
+    await tx.commit();
+
     return res.json({ message: "OK" });
 
   } catch (err) {
     console.error(err);
+
+    if (transactionStarted) {
+      await tx.rollback();
+    }
+
     return res.status(500).json({ message: "IPN error" });
   }
 });
