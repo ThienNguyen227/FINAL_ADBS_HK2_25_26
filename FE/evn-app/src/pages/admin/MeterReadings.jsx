@@ -9,11 +9,14 @@ export default function MeterReadings() {
   const [meters, setMeters] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [timeIndex, setTimeIndex] = useState(null); // null để tự động lấy mốc mới nhất khi load
+  const [timeIndex, setTimeIndex] = useState(null); 
+  const [targetDate, setTargetDate] = useState(new Date().toISOString().split('T')[0]);
 
   const formatTimeLabel = (value) => {
     if (value === null) return "Đang tải...";
-    const totalMinutes = value * 15;
+    // Đảm bảo index luôn nằm trong khoảng 0-95 để hiển thị đúng 24h
+    const safeValue = value % 96; 
+    const totalMinutes = safeValue * 15;
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
@@ -23,13 +26,11 @@ export default function MeterReadings() {
     setLoading(true);
     setError(null);
     try {
-      // Nếu là Refresh hoặc mới load (timeIndex=null), gửi -1 để lấy mốc mới nhất
       const queryInterval = (isRefresh || timeIndex === null) ? -1 : timeIndex;
-      const res = await fetch(`http://localhost:3004/api/usage/all-status?interval=${queryInterval}`);
+      const res = await fetch(`http://localhost:3004/api/usage/all-status?date=${targetDate}&interval=${queryInterval}`);
       const data = await res.json();
       if (data.success) {
         setMeters(data.data);
-        // Tự động nhảy thanh trượt về mốc mới nhất nếu Backend trả về
         if (queryInterval === -1) {
           setTimeIndex(data.latest_interval);
         }
@@ -43,12 +44,10 @@ export default function MeterReadings() {
     }
   };
 
-  // Load lần đầu
   useEffect(() => {
     fetchMeters();
-  }, []);
+  }, [targetDate]); // Tự động load khi đổi ngày
 
-  // Load khi người dùng chủ động kéo thanh trượt (chỉ chạy khi timeIndex đã có giá trị)
   useEffect(() => {
     if (timeIndex !== null) {
       fetchMeters();
@@ -75,9 +74,22 @@ export default function MeterReadings() {
         <Typography variant="h4" fontWeight="bold" color="primary">
           📈 Giám sát thông số toàn bộ đồng hồ
         </Typography>
-        <Button variant="contained" color="primary" onClick={() => fetchMeters(true)} disabled={loading}>
-          Làm mới
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <input
+            type="date"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            style={{
+              padding: '8px',
+              borderRadius: '4px',
+              border: '1px solid #ccc',
+              fontFamily: 'inherit'
+            }}
+          />
+          <Button variant="contained" color="primary" onClick={() => fetchMeters(true)} disabled={loading}>
+            Làm mới
+          </Button>
+        </Box>
       </Box>
 
       <Card sx={{ mb: 4, p: 3, bgcolor: '#f8fafc', border: '1px solid #e2e8f0' }}>

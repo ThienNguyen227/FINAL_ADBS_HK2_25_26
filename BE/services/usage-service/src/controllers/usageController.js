@@ -7,7 +7,14 @@ const { baselineCache, alertBuffer } = require("../utils/memoryCache");
 // 1. Lấy danh sách bất thường (Tier 1 & Tier 2 Integration - Z-Score Analysis)
 exports.getAnomalies = async (req, res) => {
   try {
-    const targetDate = req.query.date ? new Date(req.query.date) : new Date(new Date().setHours(0, 0, 0, 0));
+    let targetDate;
+    if (req.query.date) {
+      const [year, month, day] = req.query.date.split('-').map(Number);
+      targetDate = new Date(year, month - 1, day);
+    } else {
+      targetDate = new Date();
+      targetDate.setHours(0, 0, 0, 0);
+    }
     const interval = req.query.interval !== undefined ? Number(req.query.interval) : -1;
 
     // Sử dụng Aggregation Pipeline để tính Z-Score dựa trên Baseline đã lưu
@@ -63,16 +70,17 @@ exports.getAnomalies = async (req, res) => {
       { $sort: { z_score: -1 } }
     ]);
 
-    // Tìm mốc interval gần nhất của toàn bộ hệ thống (không chỉ dựa trên hộ lỗi)
+    // Tìm mốc interval gần nhất của toàn bộ hệ thống
     const globalLatestDoc = await UsageReading.findOne({ day: targetDate }).sort({ reading_count: -1 });
-    const latestInterval = globalLatestDoc ? globalLatestDoc.reading_count - 1 : 0;
+    let latestInterval = globalLatestDoc ? globalLatestDoc.reading_count - 1 : 0;
+    if (latestInterval > 95) latestInterval = 95;
 
-    res.status(200).json({ 
-      success: true, 
-      count: anomalies.length, 
+    res.status(200).json({
+      success: true,
+      count: anomalies.length,
       latest_interval: latestInterval >= 0 ? latestInterval : 0,
       data: anomalies,
-      method: "Z-Score Analysis (Tiered Model)" 
+      method: "Z-Score Analysis (Tiered Model)"
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -82,7 +90,14 @@ exports.getAnomalies = async (req, res) => {
 // Lấy trạng thái toàn bộ đồng hồ (Tất cả chỉ số: Sigma, Mu, Z-Score, Lần bấm giả lập cuối cùng)
 exports.getAllMetersStatus = async (req, res) => {
   try {
-    const targetDate = req.query.date ? new Date(req.query.date) : new Date(new Date().setHours(0, 0, 0, 0));
+    let targetDate;
+    if (req.query.date) {
+      const [year, month, day] = req.query.date.split('-').map(Number);
+      targetDate = new Date(year, month - 1, day);
+    } else {
+      targetDate = new Date();
+      targetDate.setHours(0, 0, 0, 0);
+    }
     const interval = req.query.interval !== undefined ? Number(req.query.interval) : -1;
 
     const meters = await UsageReading.aggregate([
@@ -128,14 +143,15 @@ exports.getAllMetersStatus = async (req, res) => {
       { $sort: { z_score: -1 } }
     ]);
 
-    // Tính toán mốc interval gần nhất dựa trên số lượng bản ghi thực tế
-    const latestInterval = meters.length > 0 ? Math.max(...meters.map(m => m.reading_count)) - 1 : 0;
+    // Tính toán mốc interval gần nhất dựa trên số lượng bản ghi thực tế, giới hạn tối đa 95
+    let latestInterval = meters.length > 0 ? Math.max(...meters.map(m => m.reading_count)) - 1 : 0;
+    if (latestInterval > 95) latestInterval = 95;
 
-    res.status(200).json({ 
-      success: true, 
-      count: meters.length, 
+    res.status(200).json({
+      success: true,
+      count: meters.length,
       latest_interval: latestInterval >= 0 ? latestInterval : 0,
-      data: meters 
+      data: meters
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -146,10 +162,10 @@ exports.getAllMetersStatus = async (req, res) => {
 exports.recordUsage = async (req, res) => {
   try {
     const { meter_id, neighborhood_id, usage, timestamp, longitude, latitude, simulation_mode } = req.body;
-    
+
     const readingTime = new Date(timestamp || Date.now());
     const startOfDay = new Date(readingTime.getFullYear(), readingTime.getMonth(), readingTime.getDate());
-    
+
     let X = Number(usage);
     const simMode = Number(simulation_mode) || 1;
 
@@ -180,35 +196,39 @@ exports.recordUsage = async (req, res) => {
     if (baseline && baseline.sigma > 0) {
       zScore = (X - baseline.mu) / baseline.sigma;
 
-      if (zScore > 3 || zScore < -3) {
+      if (X === 0 || zScore > 3 || zScore < -3) {
         isAnomaly = true;
-        console.log(`[Micro Anomaly] Phát hiện bất thường tại ${meter_id} (Z-Score: ${zScore.toFixed(2)})`);
-
-        // Đẩy vào Alert Buffer
-        if (!alertBuffer.has(neighborhood_id)) {
-          alertBuffer.set(neighborhood_id, []);
-        }
+        console.log(`[Anomaly Detected] Gửi sự kiện sang Notification Service: ${meter_id} (Usage: ${X}, Z-Score: ${zScore.toFixed(2)})`);
         
-        const buffer = alertBuffer.get(neighborhood_id);
-        // Loại bỏ các cảnh báo quá 15 phút (giả định real-time)
-        const fifteenMinsAgo = Date.now() - 15 * 60 * 1000;
-        const recentBuffer = buffer.filter(b => b.timestamp >= fifteenMinsAgo);
-        
-        // Thêm lỗi mới vào
-        recentBuffer.push({ meter_id, timestamp: Date.now() });
-        alertBuffer.set(neighborhood_id, recentBuffer);
-
-        // ==========================================
-        // KỸ THUẬT TRIỆT TIÊU CẢNH BÁO (ALERT SUPPRESSION)
-        // ==========================================
-        if (recentBuffer.length >= 5) {
-          console.log(`[Macro Anomaly - SUPPRESSION] Có ${recentBuffer.length} hộ báo lỗi trong khu ${neighborhood_id}. Đánh dấu là sự kiện vĩ mô (Lỗi trạm/Cúp điện)! Dập tắt cảnh báo cá nhân.`);
-          // (Có thể reset buffer hoặc đánh dấu trạng thái ở đây)
-          alertBuffer.set(neighborhood_id, []); // Clear buffer sau khi kích hoạt macro alert
-        } else {
-          console.log(`[Micro Anomaly] Dưới 5 hộ lỗi (${recentBuffer.length}/5) tại ${neighborhood_id}. Đánh dấu là lỗi cá nhân hợp lệ.`);
+        try {
+          fetch("http://localhost:3005/api/notifications/process-event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ meter_id, neighborhood_id, usage: X, z_score: zScore })
+          }).catch(err => console.error("Error calling notification service:", err.message));
+        } catch (e) {
+          console.error(e);
         }
+      } else {
+        // Clear watchlist if it returns to normal
+        try {
+          fetch("http://localhost:3005/api/notifications/clear-watchlist", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ meter_id })
+          }).catch(e => {});
+        } catch (e) {}
       }
+    } else if (X === 0) {
+      // Hard rule even if no baseline
+      isAnomaly = true;
+      try {
+        fetch("http://localhost:3005/api/notifications/process-event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ meter_id, neighborhood_id, usage: X, z_score: 0 })
+        }).catch(e => {});
+      } catch (e) {}
     }
 
     // ==========================================
@@ -244,13 +264,13 @@ exports.recordUsage = async (req, res) => {
 
     for (let i = 2; i <= 11; i++) {
       const bgMeterId = `METER_BG_${i}_${neighborhood_id}`;
-      let bgUsage = parseFloat((Math.random() * 0.25 + 0.1).toFixed(2)); 
+      let bgUsage = parseFloat((Math.random() * 0.25 + 0.1).toFixed(2));
 
       // Điều khiển lỗi hàng xóm theo chế độ (Mode)
       if (simMode === 2) {
         // Chế độ 2: Micro Anomaly (Dưới 5 hộ). Ta cho 2 hàng xóm (i=2,3) bị lỗi theo.
         if (i <= 3) {
-          bgUsage = X; 
+          bgUsage = X;
         }
       } else if (simMode === 3) {
         // Chế độ 3: Macro Anomaly (Từ 5 hộ trở lên). Ta cho 7 hàng xóm (i=2..8) bị lỗi theo.
@@ -269,7 +289,7 @@ exports.recordUsage = async (req, res) => {
         updateOne: {
           filter: { meter_id: bgMeterId, day: startOfDay },
           update: {
-            $setOnInsert: { 
+            $setOnInsert: {
               neighborhood_id: neighborhood_id,
               location: { type: "Point", coordinates: [baseLng + offsetLng, baseLat + offsetLat] }
             },
@@ -289,7 +309,7 @@ exports.recordUsage = async (req, res) => {
     // if (result.reading_count >= 96) {
     //   console.log(`[Batch Job - AUTO] Đồng hồ ${meter_id} đã đủ 96 chỉ số. Kích hoạt tính toán lại Baseline và Tổng hợp tháng...`);
     //   const { calculateMeterBaselines, aggregateMonthlyUsage } = require("../utils/aggregationWorker");
-      
+
     //   // Chạy cả 2 tác vụ bất đồng bộ
     //   Promise.all([
     //     calculateMeterBaselines(),
@@ -301,11 +321,10 @@ exports.recordUsage = async (req, res) => {
     //   });
     // }
     if (result.reading_count >= 96) {
-      console.log(`[Batch Job - AUTO] Đồng hồ ${meter_id} đã đủ 96 chỉ số...`);
+      console.log(`[Batch Job - AUTO] Đồng hồ ${meter_id} đã đủ 96 chỉ số. Kích hoạt tính toán lại Baseline và Tổng hợp tháng...`);
+      const { calculateMeterBaselines, aggregateMonthlyUsage } = require("../utils/aggregationWorker");
 
-      const { calculateMeterBaselines, aggregateMonthlyUsage } =
-        require("../utils/aggregationWorker");
-
+      // Chạy cả 2 tác vụ bất đồng bộ
       Promise.all([
         calculateMeterBaselines(),
         aggregateMonthlyUsage()
@@ -384,9 +403,9 @@ exports.recordUsage = async (req, res) => {
     }
 
     // Thêm log để mô phỏng Alert nếu có
-    res.status(200).json({ 
-      success: true, 
-      message: "Reading recorded successfully", 
+    res.status(200).json({
+      success: true,
+      message: "Reading recorded successfully",
       current_count: result.reading_count,
       anomaly_detected: isAnomaly,
       z_score: zScore
