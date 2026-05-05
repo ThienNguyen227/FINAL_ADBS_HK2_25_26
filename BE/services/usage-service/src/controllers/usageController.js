@@ -1,64 +1,225 @@
 const UsageReading = require("../models/UsageReading");
 const MonthlyUsageSummary = require("../models/MonthlyUsageSummary");
+const MeterBaseline = require("../models/MeterBaseline");
+const { baselineCache, alertBuffer } = require("../utils/memoryCache");
 
-// 1. Lấy danh sách bất thường (Anomaly Detection via Aggregation Pipeline)
+
+// 1. Lấy danh sách bất thường (Tier 1 & Tier 2 Integration - Z-Score Analysis)
 exports.getAnomalies = async (req, res) => {
   try {
     const targetDate = req.query.date ? new Date(req.query.date) : new Date(new Date().setHours(0, 0, 0, 0));
-    const thresholdPercent = req.query.threshold ? Number(req.query.threshold) : 200;
+    const interval = req.query.interval !== undefined ? Number(req.query.interval) : -1;
 
+    // Sử dụng Aggregation Pipeline để tính Z-Score dựa trên Baseline đã lưu
     const anomalies = await UsageReading.aggregate([
       { $match: { day: targetDate } },
       {
-        $group: {
-          _id: "$neighborhood_id",
-          avg_neighborhood_usage: { $avg: "$total_daily_usage" },
-          meters: { $push: { meter_id: "$meter_id", total_usage: "$total_daily_usage", readings: "$readings" } },
-        },
+        // Join với bảng MeterBaseline để lấy mu và sigma
+        $lookup: {
+          from: "meterbaselines",
+          localField: "meter_id",
+          foreignField: "meter_id",
+          as: "baseline_info"
+        }
       },
-      { $unwind: "$meters" },
+      { $unwind: { path: "$baseline_info", preserveNullAndEmptyArrays: false } },
       {
         $project: {
-          _id: 0,
-          neighborhood_id: "$_id",
-          meter_id: "$meters.meter_id",
-          total_usage: "$meters.total_usage",
-          readings: "$meters.readings",
-          avg_neighborhood_usage: { $round: ["$avg_neighborhood_usage", 2] },
-          usage_ratio_percent: {
-            $round: [
-              { $multiply: [ { $divide: [ "$meters.total_usage", { $cond: [ { $eq: ["$avg_neighborhood_usage", 0] }, 1, "$avg_neighborhood_usage" ] } ] }, 100 ] },
-              2,
-            ],
-          },
-        },
+          meter_id: 1,
+          neighborhood_id: 1,
+          total_daily_usage: 1,
+          reading_count: 1,
+          readings: 1, // Bổ sung để vẽ biểu đồ
+          current_usage: { $arrayElemAt: ["$readings.usage", interval] },
+          avg_usage_now: { $divide: ["$total_daily_usage", "$reading_count"] },
+          mu: "$baseline_info.mu",
+          sigma: "$baseline_info.sigma"
+        }
       },
-      { $match: { usage_ratio_percent: { $gt: thresholdPercent } } },
-      { $sort: { usage_ratio_percent: -1 } },
+      {
+        $addFields: {
+          z_score: {
+            $round: [
+              {
+                $divide: [
+                  { $subtract: ["$current_usage", "$mu"] },
+                  "$sigma"
+                ]
+              },
+              2
+            ]
+          }
+        }
+      },
+      {
+        // Lọc các bản ghi có Z-Score vượt ngưỡng (bất thường mạnh)
+        $match: {
+          $or: [
+            { z_score: { $gt: 3 } },
+            { z_score: { $lt: -3 } }
+          ]
+        }
+      },
+      { $sort: { z_score: -1 } }
     ]);
 
-    res.status(200).json({ success: true, count: anomalies.length, data: anomalies });
+    // Tìm mốc interval gần nhất của toàn bộ hệ thống (không chỉ dựa trên hộ lỗi)
+    const globalLatestDoc = await UsageReading.findOne({ day: targetDate }).sort({ reading_count: -1 });
+    const latestInterval = globalLatestDoc ? globalLatestDoc.reading_count - 1 : 0;
+
+    res.status(200).json({ 
+      success: true, 
+      count: anomalies.length, 
+      latest_interval: latestInterval >= 0 ? latestInterval : 0,
+      data: anomalies,
+      method: "Z-Score Analysis (Tiered Model)" 
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
-// 2. NHẬN DỮ LIỆU ĐO LƯỜNG TỪ SMART METER MỖI 15 PHÚT (Áp dụng Bucket Pattern)
+// Lấy trạng thái toàn bộ đồng hồ (Tất cả chỉ số: Sigma, Mu, Z-Score, Lần bấm giả lập cuối cùng)
+exports.getAllMetersStatus = async (req, res) => {
+  try {
+    const targetDate = req.query.date ? new Date(req.query.date) : new Date(new Date().setHours(0, 0, 0, 0));
+    const interval = req.query.interval !== undefined ? Number(req.query.interval) : -1;
+
+    const meters = await UsageReading.aggregate([
+      { $match: { day: targetDate } },
+      {
+        $lookup: {
+          from: "meterbaselines",
+          localField: "meter_id",
+          foreignField: "meter_id",
+          as: "baseline_info"
+        }
+      },
+      { $unwind: { path: "$baseline_info", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          meter_id: 1,
+          neighborhood_id: 1,
+          total_daily_usage: 1,
+          reading_count: 1,
+          readings: 1,
+          // Lấy mức tiêu thụ tại thời điểm được chọn (interval)
+          current_usage: { $arrayElemAt: ["$readings.usage", interval] },
+          avg_usage_now: { $divide: ["$total_daily_usage", { $cond: [{ $eq: ["$reading_count", 0] }, 1, "$reading_count"] }] },
+          mu: { $ifNull: ["$baseline_info.mu", 0] },
+          sigma: { $ifNull: ["$baseline_info.sigma", 0.01] } // Mặc định 0.01 để tránh chia cho 0
+        }
+      },
+      {
+        $addFields: {
+          z_score: {
+            $round: [
+              {
+                $divide: [
+                  { $subtract: ["$current_usage", "$mu"] }, // Dùng current_usage tại interval đó
+                  { $cond: [{ $eq: ["$sigma", 0] }, 0.01, "$sigma"] }
+                ]
+              },
+              2
+            ]
+          }
+        }
+      },
+      { $sort: { z_score: -1 } }
+    ]);
+
+    // Tính toán mốc interval gần nhất dựa trên số lượng bản ghi thực tế
+    const latestInterval = meters.length > 0 ? Math.max(...meters.map(m => m.reading_count)) - 1 : 0;
+
+    res.status(200).json({ 
+      success: true, 
+      count: meters.length, 
+      latest_interval: latestInterval >= 0 ? latestInterval : 0,
+      data: meters 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// 2. LỚP 1: Luồng Real-time Ingestion & Micro Anomaly (Luồng Ban Ngày)
 exports.recordUsage = async (req, res) => {
   try {
-    const { meter_id, neighborhood_id, usage, timestamp, longitude, latitude } = req.body;
+    const { meter_id, neighborhood_id, usage, timestamp, longitude, latitude, simulation_mode } = req.body;
     
     const readingTime = new Date(timestamp || Date.now());
     const startOfDay = new Date(readingTime.getFullYear(), readingTime.getMonth(), readingTime.getDate());
+    
+    let X = Number(usage);
+    const simMode = Number(simulation_mode) || 1;
 
-    // Tạo đối tượng cập nhật
+    // Ghi đè lượng tiêu thụ của đồng hồ gốc nếu đang chọn chế độ sinh lỗi
+    if (simMode === 2 || simMode === 3) {
+      X = parseFloat((Math.random() * (9.0 - 6.0) + 6.0).toFixed(2)); // Cố tình bơm số điện siêu cao để chắc chắn Z > 3
+    } else if (simMode === 4 || simMode === 5) {
+      X = 0; // Mất điện: Tiêu thụ về 0
+    }
+
+    // ==========================================
+    // ANOMALY DETECTION THỜI GIAN THỰC (LỚP 1)
+    // ==========================================
+    // Lấy baseline từ In-Memory Cache (thay thế cho Redis)
+    let baseline = baselineCache.get(meter_id);
+    if (!baseline) {
+      // Fallback: Nếu không có trên cache, thử tìm trong DB
+      const dbBaseline = await MeterBaseline.findOne({ meter_id });
+      if (dbBaseline) {
+        baseline = { mu: dbBaseline.mu, sigma: dbBaseline.sigma };
+        baselineCache.set(meter_id, baseline);
+      }
+    }
+
+    let isAnomaly = false;
+    let zScore = 0;
+
+    if (baseline && baseline.sigma > 0) {
+      zScore = (X - baseline.mu) / baseline.sigma;
+
+      if (zScore > 3 || zScore < -3) {
+        isAnomaly = true;
+        console.log(`[Micro Anomaly] Phát hiện bất thường tại ${meter_id} (Z-Score: ${zScore.toFixed(2)})`);
+
+        // Đẩy vào Alert Buffer
+        if (!alertBuffer.has(neighborhood_id)) {
+          alertBuffer.set(neighborhood_id, []);
+        }
+        
+        const buffer = alertBuffer.get(neighborhood_id);
+        // Loại bỏ các cảnh báo quá 15 phút (giả định real-time)
+        const fifteenMinsAgo = Date.now() - 15 * 60 * 1000;
+        const recentBuffer = buffer.filter(b => b.timestamp >= fifteenMinsAgo);
+        
+        // Thêm lỗi mới vào
+        recentBuffer.push({ meter_id, timestamp: Date.now() });
+        alertBuffer.set(neighborhood_id, recentBuffer);
+
+        // ==========================================
+        // KỸ THUẬT TRIỆT TIÊU CẢNH BÁO (ALERT SUPPRESSION)
+        // ==========================================
+        if (recentBuffer.length >= 5) {
+          console.log(`[Macro Anomaly - SUPPRESSION] Có ${recentBuffer.length} hộ báo lỗi trong khu ${neighborhood_id}. Đánh dấu là sự kiện vĩ mô (Lỗi trạm/Cúp điện)! Dập tắt cảnh báo cá nhân.`);
+          // (Có thể reset buffer hoặc đánh dấu trạng thái ở đây)
+          alertBuffer.set(neighborhood_id, []); // Clear buffer sau khi kích hoạt macro alert
+        } else {
+          console.log(`[Micro Anomaly] Dưới 5 hộ lỗi (${recentBuffer.length}/5) tại ${neighborhood_id}. Đánh dấu là lỗi cá nhân hợp lệ.`);
+        }
+      }
+    }
+
+    // ==========================================
+    // LƯU TRỮ VÀO MONGODB (Single-Document Atomicity)
+    // ==========================================
     const updateObj = {
       $setOnInsert: { neighborhood_id: neighborhood_id },
-      $push: { readings: { timestamp: readingTime, usage: Number(usage) } },
-      $inc: { total_daily_usage: Number(usage), reading_count: 1 }
+      $push: { readings: { timestamp: readingTime, usage: X } },
+      $inc: { total_daily_usage: X, reading_count: 1 }
     };
 
-    // Nếu có tọa độ, lưu vào GeoJSON location
     if (longitude && latitude) {
       updateObj.$set = {
         location: {
@@ -74,17 +235,33 @@ exports.recordUsage = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // ================== ĐỒNG BỘ HÓA DỮ LIỆU HÀNG XÓM (REAL-TIME SIMULATION) ==================
-    // Mỗi khi người dùng thật gửi 1 bản ghi, tự động cập nhật 10 hàng xóm ảo trong cùng khu vực
+    // ==========================================
+    // ĐỒNG BỘ HÓA DỮ LIỆU HÀNG XÓM (REAL-TIME SIMULATION)
+    // ==========================================
     const bgOps = [];
     const baseLng = longitude ? Number(longitude) : 106.7009;
     const baseLat = latitude ? Number(latitude) : 10.7769;
 
     for (let i = 2; i <= 11; i++) {
       const bgMeterId = `METER_BG_${i}_${neighborhood_id}`;
-      const bgUsage = parseFloat((Math.random() * 0.25 + 0.1).toFixed(2)); // Tiêu thụ ảo ngẫu nhiên
+      let bgUsage = parseFloat((Math.random() * 0.25 + 0.1).toFixed(2)); 
 
-      // Sinh tọa độ ngẫu nhiên nếu là lần đầu tạo đồng hồ này (upsert)
+      // Điều khiển lỗi hàng xóm theo chế độ (Mode)
+      if (simMode === 2) {
+        // Chế độ 2: Micro Anomaly (Dưới 5 hộ). Ta cho 2 hàng xóm (i=2,3) bị lỗi theo.
+        if (i <= 3) {
+          bgUsage = X; 
+        }
+      } else if (simMode === 3) {
+        // Chế độ 3: Macro Anomaly (Từ 5 hộ trở lên). Ta cho 7 hàng xóm (i=2..8) bị lỗi theo.
+        if (i <= 8) {
+          bgUsage = X;
+        }
+      } else if (simMode === 5) {
+        // Chế độ 5: Mất điện toàn khu. Tất cả hàng xóm cũng về 0.
+        bgUsage = 0;
+      }
+
       const offsetLng = (Math.random() - 0.5) * 0.02;
       const offsetLat = (Math.random() - 0.5) * 0.02;
 
@@ -94,10 +271,7 @@ exports.recordUsage = async (req, res) => {
           update: {
             $setOnInsert: { 
               neighborhood_id: neighborhood_id,
-              location: {
-                type: "Point",
-                coordinates: [baseLng + offsetLng, baseLat + offsetLat]
-              }
+              location: { type: "Point", coordinates: [baseLng + offsetLng, baseLat + offsetLat] }
             },
             $push: { readings: { timestamp: readingTime, usage: bgUsage } },
             $inc: { total_daily_usage: bgUsage, reading_count: 1 }
@@ -107,46 +281,128 @@ exports.recordUsage = async (req, res) => {
       });
     }
 
-    // Thực hiện cập nhật đồng loạt hàng xóm ảo
     await UsageReading.bulkWrite(bgOps);
 
-    const monthKey = `${readingTime.getFullYear()}-${String(
-      readingTime.getMonth() + 1
-    ).padStart(2, "0")}`;
+    // ==========================================
+    // TỰ ĐỘNG KÍCH HOẠT LỚP 2 (BATCH JOB) KHI HẾT NGÀY (96/96)
+    // ==========================================
+    // if (result.reading_count >= 96) {
+    //   console.log(`[Batch Job - AUTO] Đồng hồ ${meter_id} đã đủ 96 chỉ số. Kích hoạt tính toán lại Baseline và Tổng hợp tháng...`);
+    //   const { calculateMeterBaselines, aggregateMonthlyUsage } = require("../utils/aggregationWorker");
+      
+    //   // Chạy cả 2 tác vụ bất đồng bộ
+    //   Promise.all([
+    //     calculateMeterBaselines(),
+    //     aggregateMonthlyUsage()
+    //   ]).then(() => {
+    //     console.log("[Batch Job - AUTO] Đã hoàn thành cập nhật Baseline và Monthly Summary.");
+    //   }).catch(err => {
+    //     console.error("[Batch Job - AUTO] Lỗi khi chạy tác vụ tự động:", err);
+    //   });
+    // }
+    if (result.reading_count >= 96) {
+      console.log(`[Batch Job - AUTO] Đồng hồ ${meter_id} đã đủ 96 chỉ số...`);
 
-    // update cho meter thật
-    await MonthlyUsageSummary.findOneAndUpdate(
-      {
-        meter_id,
-        month: monthKey
-      },
-      {
-        $set: {
-          neighborhood_id,
-          last_updated: new Date()
-        },
-        $inc: {
-          total_monthly_usage: Number(usage)
+      const { calculateMeterBaselines, aggregateMonthlyUsage } =
+        require("../utils/aggregationWorker");
+
+      Promise.all([
+        calculateMeterBaselines(),
+        aggregateMonthlyUsage()
+      ]).then(async () => {
+
+        console.log("[Batch Job] Aggregation done → CALL MONTHLY API");
+
+        try {
+          // ==========================================
+          // 1. LẤY DATA QUA API (đúng kiến trúc bạn đã build)
+          // ==========================================
+          const monthStr = startOfDay.toISOString().slice(0, 7);
+
+          const usageRes = await fetch(
+            `http://localhost:3004/api/usage/monthly-summary?meter_id=${meter_id}&month=${monthStr}`
+          );
+
+          const usageJson = await usageRes.json();
+
+          if (!usageJson.success || !usageJson.data?.length) {
+            console.log("No monthly data found");
+            return;
+          }
+
+          const monthlyData = usageJson.data[0];
+
+          // Lấy customer_id và contract_id
+          const userId = Number(meter_id.split("_")[1]); // 33
+          const customerRes = await fetch(
+            `http://localhost:3001/customer/customer-contract-id?user_id=${userId}`
+          );
+          const customerJson = await customerRes.json();
+
+          if (!customerJson.customer_id || !customerJson.contract_id) {
+            throw new Error("Cannot get customer-contract info");
+          }
+
+          const customer_id = customerJson.customer_id;
+          const contract_id = customerJson.contract_id;
+          const contract_rate = customerJson.contract_rate;
+          // ==========================================
+          // 2. CALL BILLING SERVICE
+          // ==========================================
+
+          const billingRes = await fetch("http://localhost:3003/billing/generates", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              invoice_month: monthlyData.month + "-01",
+              invoice_total_usage: monthlyData.total_monthly_usage,
+              invoice_rate: contract_rate,
+              invoice_customer_id: customer_id,
+              invoice_contract_id: contract_id
+            })
+          });
+
+          const billingData = await billingRes.json();
+
+          console.log("🔥 BILLING RESPONSE:", billingData);
+
+          if (!billingRes.ok) {
+            console.error("❌ Billing FAILED:", billingData);
+          } else {
+            console.log("✅ Billing SUCCESS:", billingData);
+          }
+
+        } catch (err) {
+          console.error("[Billing ERROR]", err);
         }
-      },
-      {
-        upsert: true,
-        new: true
-      }
-    );
 
-    res.status(200).json({ success: true, message: "Reading recorded successfully", current_count: result.reading_count });
+      }).catch(err => {
+        console.error("[Batch Job ERROR]", err);
+      });
+    }
+
+    // Thêm log để mô phỏng Alert nếu có
+    res.status(200).json({ 
+      success: true, 
+      message: "Reading recorded successfully", 
+      current_count: result.reading_count,
+      anomaly_detected: isAnomaly,
+      z_score: zScore
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
-// 6. TRIGGER THỦ CÔNG VIỆC TỔNG HỢP DỮ LIỆU THÁNG (Materialized View)
+// 6. TRIGGER THỦ CÔNG VIỆC TỔNG HỢP DỮ LIỆU THÁNG & BASELINE
 exports.triggerAggregation = async (req, res) => {
   try {
-    const { aggregateMonthlyUsage } = require("../utils/aggregationWorker");
+    const { aggregateMonthlyUsage, calculateMeterBaselines } = require("../utils/aggregationWorker");
     await aggregateMonthlyUsage();
-    res.status(200).json({ success: true, message: "Đã kích hoạt tổng hợp dữ liệu tháng thành công!" });
+    await calculateMeterBaselines();
+    res.status(200).json({ success: true, message: "Đã kích hoạt tổng hợp dữ liệu tháng và tính toán Baseline thành công!" });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
