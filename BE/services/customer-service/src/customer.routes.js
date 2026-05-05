@@ -30,6 +30,9 @@ const checkContractRoute = require("./customer-modules/check-contract.module");
 
 
 
+// 9.
+const updateOfflineStatusRoute = require("./customer-modules/update_offline_status.module");
+
 // .
 router.use("/create-customer", createCustomerRoute);
 
@@ -60,5 +63,8 @@ router.use("/check-contract", checkContractRoute);
 
 
 
+
+// 9.
+router.use("/update-offline-status", updateOfflineStatusRoute);
 
 module.exports = router;

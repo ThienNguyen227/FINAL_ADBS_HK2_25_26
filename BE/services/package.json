@@ -2,7 +2,7 @@
   "name": "all-services",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"cd user-service && npm run dev\" \"cd customer-service && npm run dev\" \"cd usage-service && npm run dev\" \"cd billing-service && npm run dev\""
+    "dev": "concurrently \"cd user-service && npm run dev\" \"cd customer-service && npm run dev\" \"cd usage-service && npm run dev\" \"cd billing-service && npm run dev\" \"cd notification-service && node src/index.js\""
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
