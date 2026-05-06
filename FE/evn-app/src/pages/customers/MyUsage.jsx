@@ -171,6 +171,39 @@ export default function MyUsage() {
     }
   };
 
+  const handleClearData = async () => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu đo lường trong MongoDB? Hành động này không thể hoàn tác.")) return;
+
+    try {
+      const res = await fetch("http://localhost:3004/api/usage/clear-data", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        fetchHistory(); // Refresh table
+      }
+    } catch (err) {
+      alert("Lỗi khi xóa dữ liệu");
+    }
+  };
+
+  const handleUndoLast = async () => {
+    try {
+      const res = await fetch("http://localhost:3004/api/usage/delete-latest", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meter_id: userMeterId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchHistory(); // Refresh table
+      } else {
+        alert(data.message || "Không thể hoàn tác");
+      }
+    } catch (err) {
+      alert("Lỗi khi hoàn tác");
+    }
+  };
+
   useEffect(() => {
     if (userMeterId) {
       fetchHistory();
@@ -216,20 +249,12 @@ export default function MyUsage() {
             style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
           >
             <option value={1}>🟢 Chế độ 1: Bình thường</option>
-            <option value={2}>🟠 Chế độ 2: Lỗi vi mô (Cá nhân - Dưới 5 hộ)</option>
-            <option value={3}>🔴 Chế độ 3: Lỗi vĩ mô (Cúp điện trạm - Trên 5 hộ)</option>
+            <option value={2}>🟠 Chế độ 2: Lỗi vi mô (Cá nhân)</option>
+            <option value={3}>🔴 Chế độ 3: Lỗi vĩ mô (Điện trạm)</option>
             <option value={4}>⚫ Chế độ 4: Mất điện cá nhân (Tiêu thụ = 0)</option>
             <option value={5}>🚫 Chế độ 5: Mất điện toàn khu (Tất cả = 0)</option>
+            <option value={6}>🟡 Chế độ 6: Bất thường nhẹ (Test Watchlist)</option>
           </select>
-          {/* <Button
-            variant="contained"
-            color="secondary"
-            onClick={handleSimulateReading}
-            disabled={!neighborhoodId || isMaxedOut}
-            sx={{ fontWeight: 'bold' }}
-          >
-            {isMaxedOut ? "✅ Đã xong 24h" : "Giả lập 15p"}
-          </Button> */}
           <Button
             variant="contained"
             color="secondary"
@@ -245,10 +270,19 @@ export default function MyUsage() {
             {checkingContract
               ? "Đang kiểm tra..."
               : !hasContract
-              ? "Chưa có hợp đồng"
-              : isMaxedOut
-              ? "✅ Đã xong 24h"
-              : "Giả lập 15p"}
+                ? "Chưa có hợp đồng"
+                : isMaxedOut
+                  ? "✅ Đã xong 24h"
+                  : "Giả lập 15p"}
+          </Button>
+
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={handleClearData}
+            sx={{ fontWeight: "bold" }}
+          >
+            Xóa dữ liệu
           </Button>
         </Box>
 

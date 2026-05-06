@@ -52,15 +52,23 @@ const Login = () => {
 
     const res = await login(form);
 
-    // Cần chỉnh
-    if (!res?.error) {
+    // Điều hướng dựa trên Vai trò (Role)
+    if (!res?.error && res?.user) {
       setTimeout(() => {
-        navigate("/customers/myinformation", {
-          state: {
-            
-          },
-        });
-      }, 2000);
+        const roleId = res.user.user_role_id;
+        
+        if (roleId === 1) {
+          navigate("/admin/dashboard");
+        } else if (roleId === 2) {
+          navigate("/admin/meter-readings");
+        } else if (roleId === 3) {
+          navigate("/admin/billing");
+        } else if (roleId === 4) {
+          navigate("/customers/myinformation");
+        } else {
+          navigate("/customers/myinformation"); // Mặc định
+        }
+      }, 1000);
       setTimeout(() => {
         setSuccess(null);
       }, 3000);

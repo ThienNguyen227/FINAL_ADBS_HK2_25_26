@@ -67,4 +67,8 @@ router.use("/check-contract", checkContractRoute);
 // 9.
 router.use("/update-offline-status", updateOfflineStatusRoute);
 
+// 10.
+const updateOnlineStatusRoute = require("./customer-modules/update_online_status.module");
+router.use("/update-online-status", updateOnlineStatusRoute);
+
 module.exports = router;
