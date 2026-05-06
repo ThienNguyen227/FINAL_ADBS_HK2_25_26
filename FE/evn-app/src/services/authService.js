@@ -58,3 +58,13 @@ export const logOutAPI = async () => {
     }
   );
 };
+
+export const refreshTokenAPI = () => {
+  return axios.post(
+    "http://localhost:3000/auth/refresh-token",
+    {},
+    {
+      withCredentials: true
+    }
+  );
+};

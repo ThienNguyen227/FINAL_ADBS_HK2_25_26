@@ -10,6 +10,7 @@ import { MdDashboard } from "react-icons/md";
 import { TbReportSearch, TbContract } from "react-icons/tb";
 import { IoInformationCircle } from "react-icons/io5";
 import { MdLocationOn } from "react-icons/md";
+import { MdManageAccounts } from "react-icons/md";
 
 import { useAuth } from "../hooks/useAuth";
 
@@ -30,6 +31,7 @@ export default function Sidebar() {
   const menus = {
     Admin: [
       { name: "Trang chủ", path: "/admin/dashboard", icon: <MdDashboard /> },
+      { name: "Tài khoản", path: "/admin/account", icon: <MdManageAccounts /> },
       { name: "Khách hàng", path: "/admin/customers", icon: <FaUsers /> },
       { name: "Hợp đồng", path: "/admin/contracts", icon: <LiaFileContractSolid /> },
       { name: "Đọc chỉ số công tơ", path: "/admin/meter-readings", icon: <FaTachometerAlt /> },
