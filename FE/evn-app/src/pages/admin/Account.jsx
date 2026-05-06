@@ -15,6 +15,9 @@ export default function Account() {
     errorUpdate, 
     successUpdate,
     setErrorUpdate,
+    createAccount,
+    errorCreate,
+    successCreate,
   } = useAdmin();
 
   const [search, setSearch] = useState("");
@@ -23,6 +26,14 @@ export default function Account() {
   const [openEdit, setOpenEdit] = useState(false);
   const [editData, setEditData] = useState(null);
   const [originalData, setOriginalData] = useState(null);
+  const [openCreate, setOpenCreate] = useState(false);
+  const [createData, setCreateData] = useState({
+    user_name: "",
+    user_email: "",
+    user_phone: "",
+    password: "",
+    user_role_id: ""
+  });
 
   useEffect(() => {
     getAccounts();
@@ -52,7 +63,15 @@ export default function Account() {
       {/* Header */}
       <div className="account-header">
         <h1>Quản lý tài khoản</h1>
-        <button className="btn-add">+ Thêm tài khoản</button>
+        <button
+          className="btn-add"
+          onClick={() => {
+            getRoles();
+            setOpenCreate(true);
+          }}
+        >
+          + Thêm tài khoản
+        </button>
       </div>
 
       {/* Search */}
@@ -377,6 +396,116 @@ export default function Account() {
             </div>
             {errorUpdate && (<div className="alert-error">❌ {errorUpdate}</div>)}
             {successUpdate && (<div className="alert-success">✅ {successUpdate}</div>)}
+
+          </div>
+        </div>
+      )}
+      {/* Model Thêm tài khoản */}
+      {openCreate && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+
+            <div className="modal-header">
+              <h2>Thêm tài khoản</h2>
+              <button
+                className="close-btn"
+                onClick={() => setOpenCreate(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body edit-form">
+
+              <div className="form-group">
+                <label>Tên đăng nhập</label>
+                <input
+                  className="form-input"
+                  value={createData.user_name}
+                  onChange={(e) =>
+                    setCreateData({ ...createData, user_name: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Email</label>
+                <input
+                  className="form-input"
+                  value={createData.user_email}
+                  onChange={(e) =>
+                    setCreateData({ ...createData, user_email: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Số điện thoại</label>
+                <input
+                  className="form-input"
+                  value={createData.user_phone}
+                  onChange={(e) =>
+                    setCreateData({ ...createData, user_phone: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Mật khẩu</label>
+                <input
+                  type="password"
+                  className="form-input"
+                  value={createData.password}
+                  onChange={(e) =>
+                    setCreateData({ ...createData, password: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Vai trò</label>
+                <select
+                  className="form-select"
+                  value={createData.user_role_id}
+                  onChange={(e) =>
+                    setCreateData({
+                      ...createData,
+                      user_role_id: Number(e.target.value)
+                    })
+                  }
+                >
+                  <option value="">-- Chọn role --</option>
+                  {roles.map(role => (
+                    <option key={role.role_id} value={role.role_id}>
+                      {role.role_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+            </div>
+
+            <div className="modal-footer">
+              <button
+                className="btn-save"
+                disabled={loading}
+                onClick={async () => {
+                  try {
+                    await createAccount(createData)
+
+                    await getAccounts();
+                    setOpenCreate(false);
+
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+              >
+                {loading ? "Đang tạo tài khoản ..." : "Tạo tài khoản"}
+              </button>
+            </div>
+            {errorCreate && (<div className="alert-error">❌ {errorCreate}</div>)}
+            {successCreate && (<div className="alert-success">✅ {successCreate}</div>)}
 
           </div>
         </div>
