@@ -31,6 +31,7 @@ export default function Sidebar() {
   const menus = {
     Admin: [
       { name: "Trang chủ", path: "/admin/dashboard", icon: <MdDashboard /> },
+      { name: "Tài khoản", path: "/admin/account", icon: <MdManageAccounts /> },
       { name: "Khách hàng", path: "/admin/customers", icon: <FaUsers /> },
       { name: "Hợp đồng", path: "/admin/contracts", icon: <LiaFileContractSolid /> },
       { name: "Đọc chỉ số công tơ", path: "/admin/meter-readings", icon: <FaTachometerAlt /> },
