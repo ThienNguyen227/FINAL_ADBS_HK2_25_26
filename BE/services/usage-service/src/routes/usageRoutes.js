@@ -13,6 +13,7 @@ router.get("/monthly-summary", usageController.getMonthlySummary);
 router.get("/trigger-aggregation", usageController.triggerAggregation);
 router.get("/all-status", usageController.getAllMetersStatus);
 router.get("/system-stats", usageController.getSystemStats);
+router.get("/system-history", usageController.getSystemHistory);
 
 module.exports = router;
 

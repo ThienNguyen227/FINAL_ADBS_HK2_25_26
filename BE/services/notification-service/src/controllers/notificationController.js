@@ -15,8 +15,8 @@ const macroLock = new Set();
 
 exports.getNotifications = async (req, res) => {
   try {
-    const notifications = await Notification.find({ 
-      status: "DELIVERED" 
+    const notifications = await Notification.find({
+      status: "DELIVERED"
     }).sort({ created_at: -1 }).limit(50);
     res.status(200).json({ success: true, data: notifications });
   } catch (error) {
@@ -33,7 +33,7 @@ exports.processEvent = async (req, res) => {
     if (is_restored) {
       const userId = Number(meter_id.split("_")[1]);
       if (!isNaN(userId)) {
-        axios.post("http://localhost:3001/customer/update-online-status", { user_id: userId }).catch(() => {});
+        axios.post("http://localhost:3001/customer/update-online-status", { user_id: userId }).catch(() => { });
       }
       // Không cần xử lý tiếp nếu chỉ là tin báo online
       if (z_score <= 3.0) return res.status(200).json({ success: true });
@@ -73,8 +73,8 @@ exports.processEvent = async (req, res) => {
 
     const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
     const pendingCount = await Notification.countDocuments({
-      neighborhood_id, 
-      status: "PENDING", 
+      neighborhood_id,
+      status: "PENDING",
       created_at: { $gte: fiveMinsAgo }
     });
 
@@ -91,7 +91,7 @@ exports.processEvent = async (req, res) => {
 
       // 2. PHÁT HIỆN LỖI DIỆN RỘNG (MACRO EVENT)
       await Notification.updateMany(
-        { neighborhood_id, status: "PENDING", created_at: { $gte: fiveMinsAgo } }, 
+        { neighborhood_id, status: "PENDING", created_at: { $gte: fiveMinsAgo } },
         { $set: { status: "SUPPRESSED" } }
       );
 
@@ -105,32 +105,32 @@ exports.processEvent = async (req, res) => {
 
       if (!existingMacro) {
         await Notification.create({
-          meter_id: "AREA_WIDE",
+          meter_id: "Toàn khu",
           neighborhood_id,
           type: "MACRO_EVENT",
           status: "DELIVERED",
-          message: type === "HARD_RULE" 
-            ? `🚫 CẢNH BÁO: KHU VỰC ${neighborhood_id} ĐANG MẤT ĐIỆN DIỆN RỘNG!` 
+          message: type === "HARD_RULE"
+            ? `🚫 CẢNH BÁO: KHU VỰC ${neighborhood_id} ĐANG MẤT ĐIỆN DIỆN RỘNG!`
             : `🔥 CẢNH BÁO: KHU VỰC ${neighborhood_id} CÓ BIẾN ĐỘNG PHỤ TẢI CỰC LỚN!`
         });
 
         // Email khẩn cấp cho Operator
         transporter.sendMail({
-          from: process.env.EMAIL_USER,
+          from: `"EVN System" <${process.env.EMAIL_USER}>`,
           to: "lehang.com86@gmail.com",
           subject: "[CẢNH BÁO HỆ THỐNG] Sự cố diện rộng tại " + neighborhood_id,
           text: "Phát hiện nhiều hộ có bất thường cùng lúc. Vui lòng kiểm tra trạm biến áp."
-        }).catch(() => {});
+        }).catch(() => { });
       }
     } else {
       // CHỜ 3 GIÂY ĐỂ XÁC NHẬN LÀ LỖI CÁ NHÂN
       setTimeout(async () => {
         const check = await Notification.findById(newNotif._id);
         if (check && check.status === "PENDING") {
-          await Notification.findByIdAndUpdate(newNotif._id, { 
+          await Notification.findByIdAndUpdate(newNotif._id, {
             status: "DELIVERED",
-            message: type === "HARD_RULE" 
-              ? `🔴 SỰ CỐ: Mất điện tại đồng hồ ${meter_id}` 
+            message: type === "HARD_RULE"
+              ? `🔴 SỰ CỐ: Mất điện tại đồng hồ ${meter_id}`
               : `🔴 KHẨN CẤP: Phụ tải cực cao (Z=${z_score}) tại ${meter_id}`
           });
 
@@ -138,16 +138,16 @@ exports.processEvent = async (req, res) => {
           if (type === "HARD_RULE") {
             const userId = Number(meter_id.split("_")[1]);
             if (!isNaN(userId)) {
-              axios.post("http://localhost:3001/customer/update-offline-status", { user_id: userId }).catch(() => {});
+              axios.post("http://localhost:3001/customer/update-offline-status", { user_id: userId }).catch(() => { });
             }
 
             // GỬI MAIL CHO THỢ SỬA ĐIỆN
-            const mapsUrl = location 
-              ? `https://www.google.com/maps?q=${location.lat},${location.lng}` 
+            const mapsUrl = location
+              ? `https://www.google.com/maps?q=${location.lat},${location.lng}`
               : "Không có tọa độ cụ thể";
 
             transporter.sendMail({
-              from: process.env.EMAIL_USER,
+              from: `"EVN System" <${process.env.EMAIL_USER}>`,
               to: "phannguyenquocthang311205@gmail.com",
               subject: `[LỆNH CÔNG TÁC] Sửa chữa mất điện tại đồng hồ ${meter_id}`,
               text: `Chào thợ sửa điện,\n\nHệ thống Smart Grid phát hiện mất điện đột ngột tại đồng hồ: ${meter_id}.\nKhu vực: ${neighborhood_id}\n\nVị trí trên bản đồ:\n${mapsUrl}\n\nVui lòng đến kiểm tra và khắc phục sự cố ngay cho khách hàng.\n\nTrân trọng,\nHệ thống điều độ EVN.`
@@ -199,7 +199,7 @@ exports.deleteLatest = async (req, res) => {
       meter_id,
       created_at: { $gte: oneMinAgo }
     }, { sort: { created_at: -1 } });
-    
+
     res.status(200).json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });

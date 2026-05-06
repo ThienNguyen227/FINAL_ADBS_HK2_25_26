@@ -683,3 +683,33 @@ exports.getSystemStats = async (req, res) => {
   }
 };
 
+// 8. LẤY LỊCH SỬ PHỤ TẢI TOÀN HỆ THỐNG (Biểu đồ Dashboard)
+exports.getSystemHistory = async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const results = await UsageReading.aggregate([
+      { $match: { day: today } },
+      { $unwind: "$readings" },
+      {
+        $group: {
+          _id: "$readings.timestamp",
+          totalUsage: { $sum: "$readings.usage" }
+        }
+      },
+      { $sort: { "_id": 1 } }
+    ]);
+
+    const history = results.map(r => ({
+      time: new Date(r._id).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      current: parseFloat(r.totalUsage.toFixed(2)),
+      baseline: parseFloat((r.totalUsage * 0.95).toFixed(2))
+    }));
+
+    res.status(200).json({ success: true, data: history });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+

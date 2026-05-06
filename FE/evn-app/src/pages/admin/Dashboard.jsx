@@ -19,6 +19,7 @@ export default function Dashboard() {
   const [tabValue, setTabValue] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [mapPoints, setMapPoints] = useState([]);
+  const [substations, setSubstations] = useState([]); // Thêm state cho các trạm biến áp
   const [stats, setStats] = useState({ totalUsage: 0, criticalCount: 0, totalIn: 0, lossRate: 0 });
   const [trendData, setTrendData] = useState([]); // Thêm state cho biểu đồ thực
   const [loading, setLoading] = useState(true);
@@ -42,7 +43,7 @@ export default function Dashboard() {
           setMapPoints(dataMap.data);
         }
 
-        // 3. Lấy THÔNG KÊ HỆ THỐNG THỰC (Cho thẻ Tổng tiêu thụ & Thất thoát)
+        // 3. Lấy THÔNG KÊ HỆ THỐNG THỰC
         const resStats = await fetch("http://localhost:3004/api/usage/system-stats");
         const dataStats = await resStats.json();
         if (dataStats.success) {
@@ -56,17 +57,18 @@ export default function Dashboard() {
           }));
         }
 
-        // 4. Lấy dữ liệu biểu đồ thật (Dùng METER_74 làm mẫu hoặc meter đầu tiên)
-        const targetMeter = dataMap.data.length > 0 ? dataMap.data[0].meter_id : "METER_74";
-        const resTrend = await fetch(`http://localhost:3004/api/usage/history/${targetMeter}`);
+        // 4. Lấy danh sách TRẠM BIẾN ÁP (Làm mốc)
+        const resSubs = await fetch("http://localhost:3004/api/usage/substations");
+        const dataSubs = await resSubs.json();
+        if (dataSubs.success) {
+          setSubstations(dataSubs.data);
+        }
+
+        // 5. Lấy dữ liệu biểu đồ thật
+        const resTrend = await fetch(`http://localhost:3004/api/usage/system-history`);
         const dataTrend = await resTrend.json();
         if (dataTrend.success && dataTrend.data.length > 0) {
-          const history = dataTrend.data[0].readings.map(r => ({
-            time: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            current: r.usage,
-            baseline: r.usage * 0.9 
-          }));
-          setTrendData(history);
+          setTrendData(dataTrend.data);
         }
       } catch (e) {
         console.error("Lỗi khi tải dữ liệu:", e);
@@ -100,7 +102,7 @@ export default function Dashboard() {
             <CardContent>
               <Typography color="text.secondary" variant="subtitle2" fontWeight="bold">Tổng Tiêu Thụ Hệ Thống</Typography>
               <Typography variant="h4" fontWeight="bold" color="#1e293b" mt={1}>
-                {stats.totalUsage.toFixed(1)} <Typography component="span" variant="h6" color="text.secondary">kWh</Typography>
+                {Number(stats.totalUsage || 0).toFixed(1)} <Typography component="span" variant="h6" color="text.secondary">kWh</Typography>
               </Typography>
               <Typography variant="body2" color="success.main" sx={{ display: 'flex', alignItems: 'center', mt: 1, fontWeight: 'bold' }}>
                 <TrendingUpIcon fontSize="small" sx={{ mr: 0.5 }} /> Đo tại các hộ dân
@@ -139,7 +141,7 @@ export default function Dashboard() {
             <CardContent>
               <Typography color="text.secondary" variant="subtitle2" fontWeight="bold">Tỷ Lệ Thất Thoát Điện Năng</Typography>
               <Typography variant="h4" fontWeight="bold" color="#1e293b" mt={1}>
-                {stats.lossRate.toFixed(2)}%
+                {Number(stats.lossRate || 0).toFixed(2)}%
               </Typography>
               <Typography variant="body2" color={stats.lossRate > 5 ? "error.main" : "success.main"} sx={{ mt: 1, fontWeight: 'bold' }}>
                 {stats.lossRate > 5 ? "Cảnh báo thất thoát cao" : "Nằm trong ngưỡng an toàn"}
@@ -173,11 +175,42 @@ export default function Dashboard() {
                 </Typography>
               )}
 
+              {/* Hiển thị các Trạm Biến Áp (Làm mốc cố định) */}
+              {substations.map((sub, index) => {
+                const left = ((sub.longitude * 1000) % 80) + 10;
+                const top = ((sub.latitude * 1000) % 70) + 15;
+                return (
+                  <Box key={`sub-${index}`} sx={{ position: 'absolute', left: `${left}%`, top: `${top}%`, zIndex: 2 }}>
+                    <Tooltip title={`Trạm: ${sub.name} (${sub.area})`} arrow>
+                      <Box sx={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        bgcolor: 'rgba(59, 130, 246, 0.9)', p: 0.5, borderRadius: 1, border: '1px solid white'
+                      }}>
+                        <BoltIcon sx={{ fontSize: 16, color: 'white' }} />
+                      </Box>
+                    </Tooltip>
+                  </Box>
+                );
+              })}
+
               {mapPoints.map((point, index) => {
-                // Ánh xạ tọa độ giả lập sang % (Vì chúng ta không dùng thư viện Map thật ở đây)
-                // Lấy phần dư của tọa độ để rải điểm ngẫu nhiên trên khung hình
-                const left = ((point.location?.lng * 1000) % 80) + 10;
-                const top = ((point.location?.lat * 1000) % 70) + 15;
+                // Hàm tạo vị trí dựa trên ID đồng hồ để các điểm không bị trùng và luôn cố định
+                const getPos = (id, seed, max, offset) => {
+                  let hash = 0;
+                  for (let i = 0; i < id.length; i++) {
+                    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+                  }
+                  return (Math.abs(hash + seed) % max) + offset;
+                };
+
+                // Ưu tiên dùng tọa độ thật, nếu không có thì dùng hash theo ID để rải điểm
+                const left = point.location?.lng
+                  ? ((point.location.lng * 1000) % 80) + 10
+                  : getPos(point.meter_id, 10, 80, 10);
+
+                const top = point.location?.lat
+                  ? ((point.location.lat * 1000) % 70) + 15
+                  : getPos(point.meter_id, 20, 60, 20);
 
                 const isBlackout = point.current_usage === 0;
 
@@ -234,7 +267,7 @@ export default function Dashboard() {
           <Card sx={{ height: 744, display: 'flex', flexDirection: 'column', boxShadow: 2, borderRadius: 2 }}>
             <Box sx={{ p: 2, bgcolor: '#1e293b', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography variant="h6" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <NotificationsActiveIcon /> Luồng Sự Kiện Live
+                <NotificationsActiveIcon /> Các sự kiện
               </Typography>
               <Chip label="Đang theo dõi" color="error" size="small" sx={{ fontWeight: 'bold', animation: 'pulse 2s infinite' }} />
             </Box>
@@ -251,14 +284,17 @@ export default function Dashboard() {
                   <React.Fragment key={n._id || i}>
                     <ListItem alignItems="flex-start" sx={{ '&:hover': { bgcolor: '#f1f5f9' }, cursor: 'pointer', py: 2 }}>
                       <ListItemAvatar>
-                        <Avatar sx={{ bgcolor: n.type === 'HARD_RULE' ? '#fee2e2' : '#fef3c7', color: n.type === 'HARD_RULE' ? '#ef4444' : '#f59e0b' }}>
-                          {n.type === 'HARD_RULE' ? <BoltIcon /> : <WarningIcon />}
+                        <Avatar sx={{ 
+                          bgcolor: (n.type === 'HARD_RULE' || n.message?.toLowerCase().includes('mất điện')) ? '#fee2e2' : '#fef3c7', 
+                          color: (n.type === 'HARD_RULE' || n.message?.toLowerCase().includes('mất điện')) ? '#ef4444' : '#f59e0b' 
+                        }}>
+                          {(n.type === 'HARD_RULE' || n.message?.toLowerCase().includes('mất điện')) ? <BoltIcon /> : <WarningIcon />}
                         </Avatar>
                       </ListItemAvatar>
                       <ListItemText
                         primary={
-                          <Typography variant="subtitle2" fontWeight="bold" color={n.type === 'HARD_RULE' ? 'error.main' : 'warning.dark'}>
-                            {n.type === 'HARD_RULE' ? `🚨 Mất điện: ${n.meter_id}` : `⚠️ Phụ tải cao: ${n.meter_id}`}
+                          <Typography variant="subtitle2" fontWeight="bold" color={(n.type === 'HARD_RULE' || n.message?.toLowerCase().includes('mất điện')) ? 'error.main' : 'warning.dark'}>
+                            {(n.type === 'HARD_RULE' || n.message?.toLowerCase().includes('mất điện')) ? `🚨 Mất điện: ${n.meter_id || 'Diện rộng'}` : `⚠️ Phụ tải cao: ${n.meter_id}`}
                           </Typography>
                         }
                         secondary={

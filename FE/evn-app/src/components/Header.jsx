@@ -25,15 +25,15 @@ export default function Header() {
   const [tabValue, setTabValue] = useState(0);
   const [fetching, setFetching] = useState(false);
 
-  const isOperator = user?.user_name?.toLowerCase() === 'operator';
+  const isStaff = user?.user_name?.toLowerCase() === 'operator' || user?.user_name?.toLowerCase() === 'admin' || user?.user_role_id === 1;
 
   useEffect(() => {
-    if (isOperator) {
+    if (isStaff) {
       fetchNotifications();
       const intervalId = setInterval(fetchNotifications, 10000); // Check every 10s
       return () => clearInterval(intervalId);
     }
-  }, [isOperator]);
+  }, [isStaff]);
 
   const fetchNotifications = async () => {
     try {
@@ -102,7 +102,7 @@ export default function Header() {
 
       <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
         
-        {isOperator && (
+        {isStaff && (
           <Box>
             <Tooltip title="Thông báo">
               <IconButton onClick={handleOpenNotifications} color="inherit">
