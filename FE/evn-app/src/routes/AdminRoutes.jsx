@@ -1,5 +1,6 @@
 import AdminLayout from "../layouts/AdminLayout";
 import Dashboard from "../pages/admin/Dashboard";
+import Account from "../pages/admin/Account";
 import Customer from "../pages/admin/Customer";
 import Contracts from "../pages/admin/Contracts";
 import MeterReadings from "../pages/admin/MeterReadings";
@@ -17,6 +18,15 @@ export default function AdminRoutes({ role, username }) {
 
       {/* Ai cũng vào được */}
       <Route path="/admin/dashboard" element={<Dashboard />} />
+
+      <Route
+        path="/admin/account"
+        element={
+          <RoleGuard role={role} allow={["Admin"]}>
+            <Account />
+          </RoleGuard>
+        }
+      />
 
       {/* Admin only */}
       <Route

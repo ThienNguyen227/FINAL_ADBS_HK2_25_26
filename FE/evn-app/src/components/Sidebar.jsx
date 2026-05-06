@@ -10,6 +10,7 @@ import { MdDashboard } from "react-icons/md";
 import { TbReportSearch, TbContract } from "react-icons/tb";
 import { IoInformationCircle } from "react-icons/io5";
 import { MdLocationOn } from "react-icons/md";
+import { MdManageAccounts } from "react-icons/md";
 
 import { useAuth } from "../hooks/useAuth";
 
@@ -30,6 +31,7 @@ export default function Sidebar() {
   const menus = {
     Admin: [
       { name: "Dashboard", path: "/admin/dashboard", icon: <MdDashboard /> },
+      { name: "Account", path: "/admin/account", icon: <MdManageAccounts /> },
       { name: "Customers", path: "/admin/customers", icon: <FaUsers /> },
       { name: "Contracts", path: "/admin/contracts", icon: <LiaFileContractSolid /> },
       { name: "Meter Readings", path: "/admin/meter-readings", icon: <FaTachometerAlt /> },
