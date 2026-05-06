@@ -166,19 +166,8 @@ exports.recordUsage = async (req, res) => {
     const readingTime = new Date(timestamp || Date.now());
     const startOfDay = new Date(readingTime.getFullYear(), readingTime.getMonth(), readingTime.getDate());
 
-    let X = Number(usage);
     const simMode = Number(simulation_mode) || 1;
 
-    // Ghi đè lượng tiêu thụ của đồng hồ gốc nếu đang chọn chế độ sinh lỗi
-    if (simMode === 2 || simMode === 3) {
-      X = parseFloat((Math.random() * (9.0 - 6.0) + 6.0).toFixed(2)); // Cố tình bơm số điện siêu cao để chắc chắn Z > 3
-    } else if (simMode === 4 || simMode === 5) {
-      X = 0; // Mất điện: Tiêu thụ về 0
-    }
-
-    // ==========================================
-    // ANOMALY DETECTION THỜI GIAN THỰC (LỚP 1)
-    // ==========================================
     // Lấy baseline từ In-Memory Cache (thay thế cho Redis)
     let baseline = baselineCache.get(meter_id);
     if (!baseline) {
@@ -190,21 +179,57 @@ exports.recordUsage = async (req, res) => {
       }
     }
 
+    let X = Number(usage);
+
+    // Ghi đè lượng tiêu thụ của đồng hồ gốc nếu đang chọn chế độ sinh lỗi
+    if (simMode === 2 || simMode === 3) {
+      X = parseFloat((Math.random() * (5.0 - 3.0) + 3.0).toFixed(2)); // Cố tình bơm số điện siêu cao để chắc chắn Z > 3
+    } else if (simMode === 4 || simMode === 5) {
+      X = 0; // Mất điện: Tiêu thụ về 0
+    } else if (simMode === 6) {
+      // Trường hợp 2.5: Bất thường nhẹ (Z-score từ 3.1 đến 4.5) để test Watchlist
+      if (baseline && baseline.sigma > 0) {
+        const targetZ = parseFloat((Math.random() * (4.5 - 3.1) + 3.1).toFixed(2));
+        X = parseFloat((baseline.mu + targetZ * baseline.sigma).toFixed(2));
+      } else {
+        X = 2.5; // Fallback nếu chưa có baseline
+      }
+    }
+
     let isAnomaly = false;
     let zScore = 0;
 
     if (baseline && baseline.sigma > 0) {
       zScore = (X - baseline.mu) / baseline.sigma;
 
-      if (X === 0 || zScore > 3 || zScore < -3) {
-        isAnomaly = true;
-        console.log(`[Anomaly Detected] Gửi sự kiện sang Notification Service: ${meter_id} (Usage: ${X}, Z-Score: ${zScore.toFixed(2)})`);
-        
+      // Gửi sự kiện nếu có bất thường HOẶC nếu đang ở chế độ Bình thường để phục hồi trạng thái
+      if (X === 0 || zScore > 3 || zScore < -3 || simMode === 1) {
+        if (X === 0 || zScore > 3 || zScore < -3) {
+           console.log(`[Anomaly Detected] Gửi sự kiện sang Notification Service: ${meter_id} (Usage: ${X}, Z-Score: ${zScore.toFixed(2)})`);
+        }
+        // LẤY TỌA ĐỘ ĐỒNG HỒ (Từ Metadata hoặc DB)
+        let location = { lat: 10.762622, lng: 106.660172 }; // Tọa độ mặc định (TP.HCM) nếu không tìm thấy
+        try {
+          const Meter = require("../models/Meter"); // Giả định bạn có model Meter lưu vị trí
+          const meterData = await Meter.findOne({ meter_id });
+          if (meterData && meterData.location) {
+            location = meterData.location;
+          }
+        } catch (e) { }
+
+        // GỌI NOTIFICATION SERVICE
         try {
           fetch("http://localhost:3005/api/notifications/process-event", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ meter_id, neighborhood_id, usage: X, z_score: zScore })
+            body: JSON.stringify({
+              meter_id,
+              neighborhood_id,
+              usage: X,
+              z_score: zScore,
+              is_restored: X > 0,
+              location // Gửi thêm tọa độ sang
+            })
           }).catch(err => console.error("Error calling notification service:", err.message));
         } catch (e) {
           console.error(e);
@@ -216,8 +241,8 @@ exports.recordUsage = async (req, res) => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ meter_id })
-          }).catch(e => {});
-        } catch (e) {}
+          }).catch(e => { });
+        } catch (e) { }
       }
     } else if (X === 0) {
       // Hard rule even if no baseline
@@ -227,8 +252,8 @@ exports.recordUsage = async (req, res) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ meter_id, neighborhood_id, usage: X, z_score: 0 })
-        }).catch(e => {});
-      } catch (e) {}
+        }).catch(e => { });
+      } catch (e) { }
     }
 
     // ==========================================
@@ -265,21 +290,36 @@ exports.recordUsage = async (req, res) => {
     for (let i = 2; i <= 11; i++) {
       const bgMeterId = `METER_BG_${i}_${neighborhood_id}`;
       let bgUsage = parseFloat((Math.random() * 0.25 + 0.1).toFixed(2));
+      let bgZScore = 0;
 
       // Điều khiển lỗi hàng xóm theo chế độ (Mode)
       if (simMode === 2) {
-        // Chế độ 2: Micro Anomaly (Dưới 5 hộ). Ta cho 2 hàng xóm (i=2,3) bị lỗi theo.
         if (i <= 3) {
           bgUsage = X;
+          bgZScore = zScore;
         }
       } else if (simMode === 3) {
-        // Chế độ 3: Macro Anomaly (Từ 5 hộ trở lên). Ta cho 7 hàng xóm (i=2..8) bị lỗi theo.
         if (i <= 8) {
           bgUsage = X;
+          bgZScore = zScore;
         }
       } else if (simMode === 5) {
-        // Chế độ 5: Mất điện toàn khu. Tất cả hàng xóm cũng về 0.
         bgUsage = 0;
+        bgZScore = 0;
+      }
+
+      // Gửi thông báo cho đồng hồ ảo nếu đang ở chế độ lỗi (2, 3 hoặc 5)
+      const isAnomalyMode =
+        (simMode === 2 && i <= 3) ||
+        (simMode === 3 && i <= 8) ||
+        (simMode === 5);
+
+      if (isAnomalyMode) {
+        fetch("http://localhost:3005/api/notifications/process-event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ meter_id: bgMeterId, neighborhood_id, usage: bgUsage, z_score: bgZScore })
+        }).catch(() => { });
       }
 
       const offsetLng = (Math.random() - 0.5) * 0.02;
@@ -427,6 +467,75 @@ exports.triggerAggregation = async (req, res) => {
   }
 };
 
+// 7. XÓA TOÀN BỘ DỮ LIỆU MONGODB (Dùng để Reset Test)
+exports.clearAllData = async (req, res) => {
+  try {
+    const UsageReading = require("../models/UsageReading");
+    const MonthlyUsageSummary = require("../models/MonthlyUsageSummary");
+    const MeterBaseline = require("../models/MeterBaseline");
+
+    await Promise.all([
+      UsageReading.deleteMany({}),
+      MonthlyUsageSummary.deleteMany({}),
+      MeterBaseline.deleteMany({})
+    ]);
+
+    // Gọi sang Notification Service để xóa thông báo
+    try {
+      await fetch("http://localhost:3005/api/notifications/clear-all", { method: "DELETE" }).catch(() => { });
+    } catch (e) { }
+
+    res.status(200).json({ success: true, message: "Đã xóa toàn bộ dữ liệu MongoDB thành công!" });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// 8. XÓA BẢN GHI VỪA GIẢ LẬP GẦN NHẤT (Undo)
+exports.deleteLatestReading = async (req, res) => {
+  try {
+    const { meter_id } = req.body;
+    const UsageReading = require("../models/UsageReading");
+
+    // Tìm bucket ngày mới nhất của đồng hồ này
+    const latestBucket = await UsageReading.findOne({ meter_id }).sort({ day: -1 });
+
+    if (!latestBucket || latestBucket.readings.length === 0) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy dữ liệu để xóa." });
+    }
+
+    // Lấy thông tin bản ghi cuối cùng để trừ tiền/số điện
+    const lastReading = latestBucket.readings[latestBucket.readings.length - 1];
+
+    // Xóa phần tử cuối cùng
+    await UsageReading.updateOne(
+      { _id: latestBucket._id },
+      {
+        $pop: { readings: 1 },
+        $inc: {
+          reading_count: -1,
+          total_daily_usage: -lastReading.usage
+        }
+      }
+    );
+
+    // Xóa luôn thông báo liên quan (nếu có) vừa tạo trong 10 giây qua
+    try {
+      const Notification = require("../../../notification-service/src/models/Notification"); // (Lưu ý: Nếu khác DB cần cẩn thận, nhưng ở đây dùng chung Atlas)
+      // Để đơn giản, ta gọi API xóa thông báo cuối của notification service
+      await fetch("http://localhost:3005/api/notifications/delete-latest", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meter_id })
+      }).catch(() => { });
+    } catch (e) { }
+
+    res.status(200).json({ success: true, message: "Đã hoàn tác bản ghi gần nhất." });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // 3. XEM LỊCH SỬ TIÊU THỤ CỦA 1 KHÁCH HÀNG
 exports.getUsageHistory = async (req, res) => {
   try {
@@ -542,6 +651,63 @@ exports.getMonthlySummary = async (req, res) => {
       count: data.length,
       data
     });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// 7. LẤY THỐNG KÊ TOÀN HỆ THỐNG (Dùng cho Dashboard Admin)
+exports.getSystemStats = async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const latestData = await UsageReading.find({ day: today });
+    const totalOut = latestData.reduce((sum, r) => sum + (r.total_daily_usage || 0), 0);
+    
+    const technicalLossBase = 1.015; 
+    const randomNoise = 1 + (Math.random() * 0.002 - 0.001);
+    const totalIn = totalOut * technicalLossBase * randomNoise;
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        total_in: parseFloat(totalIn.toFixed(2)),
+        total_out: parseFloat(totalOut.toFixed(2)),
+        loss_rate: parseFloat(((totalIn - totalOut) / totalIn * 100).toFixed(2)),
+        active_meters: latestData.length
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// 8. LẤY LỊCH SỬ PHỤ TẢI TOÀN HỆ THỐNG (Biểu đồ Dashboard)
+exports.getSystemHistory = async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const results = await UsageReading.aggregate([
+      { $match: { day: today } },
+      { $unwind: "$readings" },
+      {
+        $group: {
+          _id: "$readings.timestamp",
+          totalUsage: { $sum: "$readings.usage" }
+        }
+      },
+      { $sort: { "_id": 1 } }
+    ]);
+
+    const history = results.map(r => ({
+      time: new Date(r._id).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      current: parseFloat(r.totalUsage.toFixed(2)),
+      baseline: parseFloat((r.totalUsage * 0.95).toFixed(2))
+    }));
+
+    res.status(200).json({ success: true, data: history });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

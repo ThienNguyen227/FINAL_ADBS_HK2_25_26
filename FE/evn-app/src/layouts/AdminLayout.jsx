@@ -1,25 +1,24 @@
 import React from "react";
 import { Outlet } from "react-router-dom";
-import Sidebar from "../components/Sidebar"; // <-- import Sidebar từ folder Components
-// import "../styles/adminLayout.css"; // nếu có CSS riêng
+import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 
-export default function AdminLayout({ username, role}) {
+export default function AdminLayout({ username, role }) {
   return (
-    <div className="h-screen flex flex-col">
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Header */}
       <Header username={username} />
     
       {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         
         {/* Sidebar */}
-        <div className="w-64 bg-gray-100">
+        <div style={{ backgroundColor: "#f3f4f6" }}>
           <Sidebar role={role} />
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 p-4 bg-gray-50 overflow-auto">
+        <div style={{ flex: 1, padding: "24px", backgroundColor: "#f9fafb", overflow: "auto", width: "100%", boxSizing: "border-box" }}>
           <Outlet />
         </div>
 
