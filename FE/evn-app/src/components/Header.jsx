@@ -25,15 +25,15 @@ export default function Header() {
   const [tabValue, setTabValue] = useState(0);
   const [fetching, setFetching] = useState(false);
 
-  const isOperator = user?.user_name?.toLowerCase() === 'operator';
+  const isStaff = user?.user_name?.toLowerCase() === 'operator' || user?.user_name?.toLowerCase() === 'admin' || user?.user_role_id === 1;
 
   useEffect(() => {
-    if (isOperator) {
+    if (isStaff) {
       fetchNotifications();
       const intervalId = setInterval(fetchNotifications, 10000); // Check every 10s
       return () => clearInterval(intervalId);
     }
-  }, [isOperator]);
+  }, [isStaff]);
 
   const fetchNotifications = async () => {
     try {
@@ -90,13 +90,7 @@ export default function Header() {
     }
   };
 
-  const filteredNotifications = notifications.filter(n => {
-    if (tabValue === 0) return true; // Tất cả
-    if (tabValue === 1) return n.type === 'HARD_RULE'; // Quan trọng
-    if (tabValue === 2) return n.type === 'Z_SCORE_ANOMALY' && n.z_score <= 10; // Cập nhật
-    if (tabValue === 3) return n.z_score > 10; // Báo cáo (nghiêm trọng)
-    return true;
-  });
+  const filteredNotifications = notifications;
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -108,7 +102,7 @@ export default function Header() {
 
       <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
         
-        {isOperator && (
+        {isStaff && (
           <Box>
             <Tooltip title="Thông báo">
               <IconButton onClick={handleOpenNotifications} color="inherit">
@@ -140,16 +134,7 @@ export default function Header() {
                 </Button>
               </Box>
 
-              <Tabs 
-                value={tabValue} 
-                onChange={(e, v) => setTabValue(v)} 
-                variant="fullWidth"
-                sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 40 }}
-              >
-                <Tab label="Tất cả" sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.85rem' }} />
-                <Tab label="Quan trọng" sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.85rem' }} />
-                <Tab label="Báo cáo" sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.85rem' }} />
-              </Tabs>
+              {/* Tabs đã bị gỡ bỏ theo yêu cầu */}
 
               <List sx={{ p: 0 }}>
                 {fetching && notifications.length === 0 ? (
@@ -220,9 +205,6 @@ export default function Header() {
                 )}
               </List>
               
-              <Box sx={{ p: 1.5, textAlign: 'center', bgcolor: '#f8fafc' }}>
-                <Button fullWidth sx={{ textTransform: 'none', fontWeight: 600 }}>Xem tất cả thông báo</Button>
-              </Box>
             </Popover>
           </Box>
         )}

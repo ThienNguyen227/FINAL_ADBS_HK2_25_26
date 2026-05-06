@@ -54,15 +54,17 @@ export default function MeterReadings() {
     }
   }, [timeIndex]);
 
-  const getSeverityColor = (zScore) => {
-    const z = Math.abs(zScore);
+  const getSeverityColor = (row) => {
+    if (row.current_usage === 0) return "error";
+    const z = Math.abs(row.z_score);
     if (z >= 5) return "error";
     if (z >= 3) return "warning";
     return "success";
   };
 
-  const getStatusLabel = (zScore) => {
-    const z = Math.abs(zScore);
+  const getStatusLabel = (row) => {
+    if (row.current_usage === 0) return "MẤT ĐIỆN";
+    const z = Math.abs(row.z_score);
     if (z >= 5) return "RẤT NGUY HIỂM";
     if (z >= 3) return "BẤT THƯỜNG";
     return "BÌNH THƯỜNG";
@@ -142,9 +144,10 @@ export default function MeterReadings() {
             </TableHead>
             <TableBody>
               {meters.map((row, index) => {
+                const isOffline = row.current_usage === 0;
                 const z = Math.abs(row.z_score);
-                const isCritical = z >= 5;
-                const isWarning = z >= 3 && z < 5;
+                const isCritical = isOffline || z >= 5;
+                const isWarning = !isOffline && z >= 3 && z < 5;
 
                 let rowBgColor = 'inherit';
                 if (isCritical) rowBgColor = '#fff5f5';
@@ -162,14 +165,14 @@ export default function MeterReadings() {
                     <TableCell align="right">{row.mu ? row.mu.toFixed(2) : '0.00'} kWh</TableCell>
                     <TableCell align="right">{row.sigma ? row.sigma.toFixed(3) : '0.00'}</TableCell>
                     <TableCell align="center">
-                      <Typography fontWeight="bold" color={getSeverityColor(row.z_score) + ".main"}>
-                        {row.z_score !== null && row.current_usage !== undefined ? row.z_score.toFixed(2) : '0.00'}
+                      <Typography fontWeight="bold" color={getSeverityColor(row) + ".main"}>
+                        {isOffline ? "--" : (row.z_score !== null && row.current_usage !== undefined ? row.z_score.toFixed(2) : '0.00')}
                       </Typography>
                     </TableCell>
                     <TableCell align="center">
                       <Chip
-                        label={getStatusLabel(row.z_score)}
-                        color={getSeverityColor(row.z_score)}
+                        label={getStatusLabel(row)}
+                        color={getSeverityColor(row)}
                         size="small"
                         sx={{ fontWeight: 'bold' }}
                       />

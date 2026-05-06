@@ -133,6 +133,7 @@ CREATE TABLE [dbo].[Customers](
 	[customer_fullname] [nvarchar](150) NULL,
 	[customer_address] [nvarchar](255) NULL,
 	[customer_priority] [varchar](20) NULL,
+	[customer_status] [nvarchar](50) NULL,
 	[customer_created_at] [datetime2](7) NULL,
 	[customer_updated_at] [datetime2](7) NULL,
 PRIMARY KEY CLUSTERED 
@@ -199,14 +200,22 @@ ON Customers
 AFTER UPDATE
 AS
 BEGIN
-    -- Nếu trạng thái vừa bị backend đổi thành OFFLINE_DETECTED
+    -- Nếu trạng thái vừa bị thay đổi
     IF UPDATE(customer_status)
     BEGIN
+        -- 1. Chuyển thành CRITICAL nếu mất điện
         UPDATE Customers
         SET customer_priority = 'CRITICAL'
         FROM Customers C
         INNER JOIN inserted I ON C.customer_id = I.customer_id
         WHERE I.customer_status = 'OFFLINE_DETECTED';
+
+        -- 2. Chuyển lại thành NORMAL nếu có điện lại (ONLINE)
+        UPDATE Customers
+        SET customer_priority = 'NORMAL'
+        FROM Customers C
+        INNER JOIN inserted I ON C.customer_id = I.customer_id
+        WHERE I.customer_status = 'ONLINE';
     END
 END;
 GO

@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }) => {
       setUser(me.data.user);
       setSuccess(res.data.message);
 
-      return res.data;
+      return { ...res.data, user: me.data.user };
     } catch (err) {
       setError(err.response?.data?.message || "Đăng nhập thất bại");
       return { error: true };
