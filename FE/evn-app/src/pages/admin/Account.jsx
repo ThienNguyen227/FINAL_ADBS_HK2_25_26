@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useAdmin } from "../../hooks/useAdmin";
+import { useAdmin } from "../../hooks/useAdminAccount";
 import "../../styles/Account.css";
 
 export default function Account() {

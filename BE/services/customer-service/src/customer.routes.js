@@ -71,4 +71,7 @@ router.use("/update-offline-status", updateOfflineStatusRoute);
 const updateOnlineStatusRoute = require("./customer-modules/update_online_status.module");
 router.use("/update-online-status", updateOnlineStatusRoute);
 
+router.use("/admin/customers", require("./customer-modules/admin/getcustomers.module"));
+router.use("/admin/customer-update", require("./customer-modules/admin/updatecustomer.module"));
+
 module.exports = router;
