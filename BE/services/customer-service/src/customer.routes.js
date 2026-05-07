@@ -74,4 +74,7 @@ router.use("/update-online-status", updateOnlineStatusRoute);
 router.use("/admin/customers", require("./customer-modules/admin/getcustomers.module"));
 router.use("/admin/customer-update", require("./customer-modules/admin/updatecustomer.module"));
 
+router.use("/admin/contracts", require("./customer-modules/admin/getcontracts.module"));
+router.use("/admin/contract-update", require("./customer-modules/admin/updatecontract.module"));
+
 module.exports = router;
