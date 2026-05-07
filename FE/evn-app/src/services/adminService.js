@@ -48,3 +48,14 @@ export const updateCustomerAPI = (data) =>
   axios.put(`${API_URL_customer}/admin/customer-update`, data, {
     headers: { Authorization: `Bearer ${token()}` }
   });
+// Contract
+export const getContractsAPI = (search = "") =>
+  axios.get(`${API_URL_customer}/admin/contracts`, {
+    params: { search },
+    headers: { Authorization: `Bearer ${token()}` }
+  });
+
+export const updateContractAPI = (data) =>
+  axios.put(`${API_URL_customer}/admin/contract-update`, data, {
+    headers: { Authorization: `Bearer ${token()}` }
+  });
