@@ -11,6 +11,21 @@ router.use("/payments", createPaymentRoute);
 router.use("/ipn", getResultPaymentRoute);
 router.use("/generates", generateInvoicesRoute);
 
+router.use(
+  "/admin/invoices",
+  require("./billing-modules/admin/getinvoices.module")
+);
+
+router.use(
+  "/admin/invoice-payments",
+  require("./billing-modules/admin/getinvoicepayments.module")
+);
+
+router.use(
+  "/admin/invoice-update",
+  require("./billing-modules/admin/updateinvoice.module")
+);
+
 
 
 module.exports = router;
