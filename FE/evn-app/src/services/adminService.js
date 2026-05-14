@@ -2,7 +2,7 @@ import axios from "axios";
 
 const API_URL = "http://localhost:3000/auth";
 const API_URL_customer = "http://localhost:3001/customer";
-
+const API_URL_billing  = "http://localhost:3003/billing";
 const token = () => sessionStorage.getItem("token");
 
 // Account
@@ -59,3 +59,28 @@ export const updateContractAPI = (data) =>
   axios.put(`${API_URL_customer}/admin/contract-update`, data, {
     headers: { Authorization: `Bearer ${token()}` }
   });
+
+
+// BILLING
+export const getInvoicesAPI = (search = "") =>
+  axios.get(`${API_URL_billing}/admin/invoices`, {
+    params: { search },
+    headers: { Authorization: `Bearer ${token()}` }
+  });
+
+export const getPaymentsByInvoiceAPI = (invoiceId) =>
+  axios.get(
+    `${API_URL_billing}/admin/invoice-payments/${invoiceId}`,
+    {
+      headers: { Authorization: `Bearer ${token()}` }
+    }
+  );
+
+export const updateInvoiceStatusAPI = (data) =>
+  axios.put(
+    `${API_URL_billing}/admin/invoice-update`,
+    data,
+    {
+      headers: { Authorization: `Bearer ${token()}` }
+    }
+  );
