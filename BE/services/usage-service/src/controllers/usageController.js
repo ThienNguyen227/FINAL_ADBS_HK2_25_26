@@ -59,11 +59,12 @@ exports.getAnomalies = async (req, res) => {
         }
       },
       {
-        // Lọc các bản ghi có Z-Score vượt ngưỡng (bất thường mạnh)
+        // Lọc các bản ghi có Z-Score vượt ngưỡng HOẶC bị mất điện (current_usage = 0)
         $match: {
           $or: [
             { z_score: { $gt: 3 } },
-            { z_score: { $lt: -3 } }
+            { z_score: { $lt: -3 } },
+            { current_usage: 0 }
           ]
         }
       },

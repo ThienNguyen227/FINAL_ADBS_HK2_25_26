@@ -71,27 +71,27 @@ exports.processEvent = async (req, res) => {
       message: type === "HARD_RULE" ? `Mất điện tại ${meter_id}` : `Phụ tải cực cao tại ${meter_id}`
     });
 
+    // 1. ĐẾM SỐ LỖI CÙNG LOẠI ĐANG CHỜ (PENDING) TRONG KHU VỰC
     const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
     const pendingCount = await Notification.countDocuments({
       neighborhood_id,
+      type, // Chỉ đếm cùng loại lỗi
       status: "PENDING",
       created_at: { $gte: fiveMinsAgo }
     });
 
-    if (pendingCount >= 5) {
-      // 1. Kiểm tra khóa trong bộ nhớ (Chống trùng lặp tức thì)
+    if (pendingCount >= 3) {
+      // 2. PHÁT HIỆN LỖI DIỆN RỘNG (MACRO EVENT) - CHẶN NGAY LẬP TỨC
       const lockKey = `${neighborhood_id}_${type}`;
       if (macroLock.has(lockKey)) {
         return res.status(200).json({ success: true, message: "Suppressed by memory lock" });
       }
 
-      // Đặt khóa
       macroLock.add(lockKey);
-      setTimeout(() => macroLock.delete(lockKey), 10000); // Mở khóa sau 10 giây
+      setTimeout(() => macroLock.delete(lockKey), 10000);
 
-      // 2. PHÁT HIỆN LỖI DIỆN RỘNG (MACRO EVENT)
       await Notification.updateMany(
-        { neighborhood_id, status: "PENDING", created_at: { $gte: fiveMinsAgo } },
+        { neighborhood_id, type, status: "PENDING", created_at: { $gte: fiveMinsAgo } },
         { $set: { status: "SUPPRESSED" } }
       );
 
